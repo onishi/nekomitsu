@@ -127,8 +127,10 @@ export class Game {
     this.heldIntro = 1;
   }
 
-  restart(): void {
-    this.startStage(this.stage, true);
+  /** 最初から（ステージ1、新しい猫で） */
+  reset(): void {
+    this.held = null;
+    this.startStage(1);
   }
 
   nextStage(): void {

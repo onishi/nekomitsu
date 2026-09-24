@@ -138,6 +138,8 @@ canvas.addEventListener('pointerup', (e) => {
 canvas.addEventListener('pointercancel', endPress);
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
+  // 「終わりますか？」を出している間はダイアログのボタン操作に任せる
+  if (quitDialog.open) return;
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     keys.add(e.key);
     e.preventDefault();
@@ -185,6 +187,31 @@ function goNext(): void {
   layout();
 }
 nextBtn.addEventListener('click', goNext);
+
+// --- タイトルを押すと「終わりますか？」: はい → ステージ1から、いいえ → 続行 ---
+const quitDialog = $<HTMLDialogElement>('quitDialog');
+let paused = false;
+$('titleBtn').addEventListener('click', () => {
+  game.sound.unlock();
+  paused = true;
+  keys.clear();
+  quitDialog.showModal();
+});
+$('quitYes').addEventListener('click', () => quitDialog.close('yes'));
+$('quitNo').addEventListener('click', () => quitDialog.close('no'));
+// Esc でも閉じる（= いいえ）
+quitDialog.addEventListener('close', () => {
+  if (quitDialog.returnValue === 'yes') {
+    game.reset();
+    fx.clear();
+    clearEl.hidden = true;
+    hint.classList.remove('fade');
+    layout();
+  }
+  quitDialog.returnValue = '';
+  paused = false;
+  last = performance.now();
+});
 let clearShownAt = 0;
 game.onClear = () => {
   setTimeout(() => {
@@ -229,6 +256,7 @@ function frame(now: number): void {
   if (el > 0.1) el = 0.1;
   acc += el;
   let steps = 0;
+  if (paused) acc = 0;
   while (acc >= DT && steps < 3) {
     if (keys.has('ArrowLeft')) game.targetX = Math.min(game.targetX, game.dropX) - 520 * DT;
     if (keys.has('ArrowRight')) game.targetX = Math.max(game.targetX, game.dropX) + 520 * DT;

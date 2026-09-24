@@ -11,7 +11,7 @@
     <canvas id="game" aria-label="金魚鉢に猫を落とすゲーム"></canvas>
     <div id="hud">
       <div class="pill stage"><span class="label">STAGE</span><b id="stageNum">1</b></div>
-      <h1 class="title">ねこみつ</h1>
+      <h1 class="title"><button id="titleBtn" type="button" aria-haspopup="dialog">ねこみつ</button></h1>
       <button id="soundBtn" class="icon" aria-label="サウンドOFF" title="サウンド ON/OFF">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
@@ -23,6 +23,13 @@
         <button id="nextBtn">つぎのステージへ</button>
       </div>
     </div>
+    <dialog id="quitDialog" aria-labelledby="quitText">
+      <p id="quitText">終わりますか？</p>
+      <div class="actions">
+        <button id="quitNo" type="button" class="secondary" autofocus>いいえ</button>
+        <button id="quitYes" type="button" class="primary">はい</button>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
