@@ -19,7 +19,9 @@ const soundBtn = $<HTMLButtonElement>('soundBtn');
 const restartBtn = $<HTMLButtonElement>('restartBtn');
 const nextBtn = $<HTMLButtonElement>('nextBtn');
 const coarse = window.matchMedia('(pointer: coarse)').matches;
-hint.textContent = coarse ? '左右に動かして、タップで落とす' : '左右に動かして、クリックで落とす（← → / Space）';
+hint.textContent = coarse
+  ? '外をタップで落とす／中をなぞって混ぜる'
+  : 'クリックで落とす（← → / Space）／鉢の中をドラッグで混ぜる';
 
 const game = new Game();
 const view: View = { scale: 1, ox: 0, oy: 0, dpr: 1, w: 1, h: 1 };
@@ -53,20 +55,42 @@ function layout(): void {
 window.addEventListener('resize', layout);
 
 // --- 入力 ---
+// 容器の外を触る: 猫を左右に動かして、離すと落とす
+// 容器の中を触る: 中の猫をつついたり、なぞってかき混ぜたりする
 function toWorldX(clientX: number): number {
   return (clientX - view.ox) / view.scale;
 }
+function toWorldY(clientY: number): number {
+  return (clientY - view.oy) / view.scale;
+}
 let pointerDown = false;
+let stirring = false;
 canvas.addEventListener('pointerdown', (e) => {
   game.sound.unlock();
-  pointerDown = true;
   canvas.setPointerCapture(e.pointerId);
-  game.targetX = toWorldX(e.clientX);
+  const wx = toWorldX(e.clientX);
+  const wy = toWorldY(e.clientY);
+  if (game.isInside(wx, wy)) {
+    stirring = true;
+    game.stirStart(wx, wy, e.timeStamp);
+    return;
+  }
+  pointerDown = true;
+  game.targetX = wx;
 });
 canvas.addEventListener('pointermove', (e) => {
+  if (stirring) {
+    game.stirMove(toWorldX(e.clientX), toWorldY(e.clientY), e.timeStamp);
+    return;
+  }
   if (e.pointerType === 'mouse' || pointerDown) game.targetX = toWorldX(e.clientX);
 });
 canvas.addEventListener('pointerup', (e) => {
+  if (stirring) {
+    stirring = false;
+    game.stirEnd();
+    return;
+  }
   if (!pointerDown) return;
   pointerDown = false;
   game.targetX = toWorldX(e.clientX);
@@ -75,6 +99,8 @@ canvas.addEventListener('pointerup', (e) => {
 });
 canvas.addEventListener('pointercancel', () => {
   pointerDown = false;
+  stirring = false;
+  game.stirEnd();
 });
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
@@ -223,6 +249,17 @@ function render(): void {
   for (const c of game.cats) drawCat(ctx, c, game.time);
   drawBowlFront(ctx, b);
   fx.draw(ctx);
+  if (game.stir.active) {
+    // かき混ぜている指
+    const st = game.stir;
+    ctx.beginPath();
+    ctx.arc(st.x, st.y, Game.STIR_R, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
   const h = game.held;
   if (h) {
     // 落下地点のガイド

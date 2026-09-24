@@ -67,6 +67,12 @@ export class Game {
   onFirstDrop: (() => void) | null = null;
   onCatEvent: ((kind: CatEvent, cat: Cat, strength: number) => void) | null = null;
 
+  /** 鉢の中をかき混ぜている指（ワールド座標） */
+  readonly stir = { active: false, x: 0, y: 0, vx: 0, vy: 0, lastT: 0 };
+  /** 指の半径と、動きが伝わる範囲 */
+  static readonly STIR_R = 24;
+  static readonly STIR_REACH = 75;
+
   constructor() {
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world = new World(this.bowl);
@@ -109,6 +115,7 @@ export class Game {
     this.world.gravityScale = 1;
     this.cats = [];
     this.held = null;
+    this.stir.active = false;
     this.phase = 'playing';
     this.fill = 0;
     this.squeeze = 0;
@@ -177,6 +184,80 @@ export class Game {
     return this.held !== null && this.heldIntro > 0.6;
   }
 
+  /** 容器の中（口より下）を触ったか */
+  isInside(x: number, y: number): boolean {
+    return this.bowl.contains(x, y);
+  }
+
+  stirStart(x: number, y: number, tMs: number): void {
+    Object.assign(this.stir, { active: true, x, y, vx: 0, vy: 0, lastT: tMs });
+  }
+
+  stirMove(x: number, y: number, tMs: number): void {
+    const st = this.stir;
+    if (!st.active) return;
+    const dt = Math.max(0.004, (tMs - st.lastT) / 1000);
+    // 指の速さ（なめらかに）
+    const k = 0.5;
+    st.vx += ((x - st.x) / dt - st.vx) * k;
+    st.vy += ((y - st.y) / dt - st.vy) * k;
+    const sp = Math.hypot(st.vx, st.vy);
+    if (sp > 1600) {
+      st.vx *= 1600 / sp;
+      st.vy *= 1600 / sp;
+    }
+    st.x = x;
+    st.y = y;
+    st.lastT = tMs;
+  }
+
+  stirEnd(): void {
+    this.stir.active = false;
+  }
+
+  /**
+   * かき混ぜ: 指のまわりの猫を指の動きに引きずり、指そのものは丸い物体として猫を押しのける。
+   * 触られた猫は目を細め、寝ていても起きる。
+   */
+  private applyStir(): void {
+    const st = this.stir;
+    if (!st.active) return;
+    const w = this.world;
+    const R1 = Game.STIR_R;
+    const R2 = Game.STIR_REACH;
+    for (const c of this.cats) {
+      const b = c.body;
+      if (b.maxX < st.x - R2 || b.minX > st.x + R2 || b.maxY < st.y - R2 || b.minY > st.y + R2) continue;
+      let touched = false;
+      for (let i = b.start; i < b.start + b.count; i++) {
+        const dx = w.x[i] - st.x;
+        const dy = w.y[i] - st.y;
+        const d = Math.hypot(dx, dy);
+        if (d >= R2) continue;
+        const f = 1 - d / R2;
+        // 指の動きに引きずられる
+        w.vx[i] += (st.vx - w.vx[i]) * 0.35 * f;
+        w.vy[i] += (st.vy - w.vy[i]) * 0.35 * f;
+        // 指の中からは押し出す
+        const lim = R1 + w.r[i];
+        if (d < lim) {
+          const nx = d > 1e-6 ? dx / d : 0;
+          const ny = d > 1e-6 ? dy / d : -1;
+          w.x[i] = st.x + nx * lim;
+          w.y[i] = st.y + ny * lim;
+          w.vx[i] += nx * 60;
+          w.vy[i] += ny * 60;
+          touched = true;
+        }
+        if (f > 0.5) touched = true;
+      }
+      if (touched && c.poke()) this.sound.munyu(0.35);
+    }
+    // 指が止まっていれば引きずる力は弱まる
+    st.vx *= 0.8;
+    st.vy *= 0.8;
+  }
+
   /** snap: 指を離した位置へ合わせてから落とす（タップ操作用） */
   drop(snap = false): void {
     if (!this.canDrop || !this.held) return;
@@ -227,6 +308,7 @@ export class Game {
     for (const c of this.cats) c.update(dt, this.env);
     if (this.held) this.held.update(dt, this.env);
 
+    this.applyStir();
     this.world.beginFrame();
     this.world.step();
 

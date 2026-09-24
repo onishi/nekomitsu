@@ -538,6 +538,7 @@ export class Cat {
     }
     this.impactTimer -= dt;
     this.pressTimer -= dt;
+    this.pokeTimer -= dt;
 
     // すぽっ: 落ち着きかけた猫が隙間へ滑り込んで、ぴたっと止まる
     if (this.landed && this.impactTimer <= 0 && !env.cleared) {
@@ -769,6 +770,21 @@ export class Cat {
     this.groomPose += (groom - this.groomPose) * Math.min(1, dt * 4);
     this.yawnOpen += (yawn - this.yawnOpen) * Math.min(1, dt * 10);
   }
+
+  /**
+   * 指でつつかれた・かき混ぜられた。目を細めて、寝ていたら起きる。
+   * 触られ始めなら true（鳴き声の合図）。
+   */
+  poke(): boolean {
+    if (!this.landed) return false;
+    const fresh = this.pokeTimer <= 0;
+    this.pressTimer = Math.max(this.pressTimer, 0.5);
+    this.pokeTimer = 0.8;
+    this.calm = Math.min(this.calm, 0.6);
+    if (this.action !== 'none') this.endAction();
+    return fresh;
+  }
+  private pokeTimer = 0;
 
   private startAction(a: CatAction, dur: number, target: Cat | null): void {
     this.action = a;
