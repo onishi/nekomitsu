@@ -15,8 +15,8 @@ const nextBtn = $<HTMLButtonElement>('nextBtn');
 const coarse = window.matchMedia('(pointer: coarse)').matches;
 // 狭い画面では「／」の区切りで折り返す
 const hintParts = coarse
-  ? ['タップで落とす', '鉢の中を長押しでかき混ぜる']
-  : ['クリックで落とす（← → / Space）', '鉢の中を長押しでかき混ぜる'];
+  ? ['タップで落とす', '鉢の中をなぞるとかき混ぜる']
+  : ['クリックで落とす（← → / Space）', '鉢の中をドラッグでかき混ぜる'];
 hint.replaceChildren(
   ...hintParts.flatMap((t, i) => {
     const span = document.createElement('span');
@@ -57,10 +57,11 @@ function layout(): void {
 window.addEventListener('resize', layout);
 
 // --- 入力 ---
-// ・短いタップ / クリック: どこを触っても猫を落とす（ドラッグで狙ってから離しても落ちる）
-// ・容器の中を長押し: 落とさずに、中の猫をかき混ぜる
+// ・すぐ離す（タップ / クリック）: どこを触っても猫を落とす
+// ・容器の中で押したまま動かす、または長押し: 落とさずに、中の猫をかき混ぜる
+// ・容器の外で押したまま動かす: 猫を左右に動かして狙い、離すと落とす
 const LONG_PRESS_MS = 300;
-const MOVE_TOLERANCE = 10; // これ以上動いたら長押しではなく「狙って落とす」
+const MOVE_TOLERANCE = 10; // これ以上動いたら「タップ」ではなく、かき混ぜ（中）/ 狙う（外）
 function toWorldX(clientX: number): number {
   return (clientX - view.ox) / view.scale;
 }
@@ -74,6 +75,7 @@ let downY = 0;
 let lastX = 0;
 let lastY = 0;
 let longTimer = 0;
+let downInside = false;
 /** 長押しの溜め表示（容器の中を押している間） */
 const press = { active: false, x: 0, y: 0, t0: 0 };
 
@@ -98,7 +100,8 @@ canvas.addEventListener('pointerdown', (e) => {
   mode = 'pending';
   const wx = toWorldX(e.clientX);
   const wy = toWorldY(e.clientY);
-  if (game.isInside(wx, wy)) {
+  downInside = game.isInside(wx, wy);
+  if (downInside) {
     longTimer = window.setTimeout(startStir, LONG_PRESS_MS);
     Object.assign(press, { active: true, x: wx, y: wy, t0: performance.now() });
   }
@@ -112,6 +115,12 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (mode === 'pending' && Math.hypot(e.clientX - downX, e.clientY - downY) > MOVE_TOLERANCE) {
     clearTimeout(longTimer);
+    if (downInside) {
+      // 容器の中で押したまま動かした: すぐにかき混ぜ
+      startStir();
+      game.stirMove(toWorldX(e.clientX), toWorldY(e.clientY), performance.now());
+      return;
+    }
     press.active = false;
     mode = 'aim';
   }
