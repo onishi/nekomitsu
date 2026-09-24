@@ -10,6 +10,7 @@ export class Sound {
   private lastMunyu = 0;
   private lastPurr = 0;
   private lastPosu = 0;
+  private lastSupo = 0;
 
   /** ユーザー操作のハンドラ内で呼ぶ */
   unlock(): void {
@@ -119,6 +120,26 @@ export class Sound {
     lfo.start(t);
     o.stop(t + 0.3);
     lfo.stop(t + 0.3);
+  }
+
+  /** すぽっ（隙間に収まる） */
+  supo(): void {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (t - this.lastSupo < 0.3) return;
+    this.lastSupo = t;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(260, t);
+    o.frequency.exponentialRampToValueAtTime(820, t + 0.07);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.28, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    o.connect(g).connect(this.master!);
+    o.start(t);
+    o.stop(t + 0.15);
   }
 
   /** 小さなゴロゴロ */

@@ -625,25 +625,30 @@ export class World {
     }
     const cs = this.cellStart;
     cs.fill(0);
-    const margin = 16; // 粒子半径の上限目安 + 辺の厚み
+    const margin = 28; // 粒子半径の上限目安 + 探索の余裕
     const cell = this.cell;
     const cols = this.cols;
     const rows = this.rows;
-    const range = (a: number, b: number, rad: number, o: number, lim: number): [number, number] => {
-      let lo = Math.floor((Math.min(a, b) - rad - margin - o) / cell);
-      let hi = Math.floor((Math.max(a, b) + rad + margin - o) / cell);
-      if (lo < 0) lo = 0;
-      if (hi >= lim) hi = lim - 1;
-      if (lo >= lim) lo = lim - 1;
-      if (hi < 0) hi = 0;
-      return [lo, hi];
-    };
+    const gx0 = this.gx0;
+    const gy0 = this.gy0;
+    const eCells = this.eCells.length >= e * 4 ? this.eCells : (this.eCells = new Int32Array(e * 8));
     let total = 0;
     for (let k = 0; k < e; k++) {
       const a = this.eA[k];
       const b = this.eB[k];
-      const [cx0, cx1] = range(x[a], x[b], this.eRad[k], this.gx0, cols);
-      const [cy0, cy1] = range(y[a], y[b], this.eRad[k], this.gy0, rows);
+      const pad = this.eRad[k] + margin;
+      let cx0 = Math.floor(((x[a] < x[b] ? x[a] : x[b]) - pad - gx0) / cell);
+      let cx1 = Math.floor(((x[a] > x[b] ? x[a] : x[b]) + pad - gx0) / cell);
+      let cy0 = Math.floor(((y[a] < y[b] ? y[a] : y[b]) - pad - gy0) / cell);
+      let cy1 = Math.floor(((y[a] > y[b] ? y[a] : y[b]) + pad - gy0) / cell);
+      cx0 = cx0 < 0 ? 0 : cx0 >= cols ? cols - 1 : cx0;
+      cx1 = cx1 < 0 ? 0 : cx1 >= cols ? cols - 1 : cx1;
+      cy0 = cy0 < 0 ? 0 : cy0 >= rows ? rows - 1 : cy0;
+      cy1 = cy1 < 0 ? 0 : cy1 >= rows ? rows - 1 : cy1;
+      eCells[k * 4] = cx0;
+      eCells[k * 4 + 1] = cx1;
+      eCells[k * 4 + 2] = cy0;
+      eCells[k * 4 + 3] = cy1;
       for (let cy = cy0; cy <= cy1; cy++)
         for (let cx = cx0; cx <= cx1; cx++) {
           cs[cy * cols + cx + 1]++;
@@ -655,17 +660,32 @@ export class World {
     const fillPos = World.fillPos.length >= cs.length ? World.fillPos : (World.fillPos = new Int32Array(cs.length));
     fillPos.set(cs.subarray(0, cs.length));
     for (let k = 0; k < e; k++) {
-      const a = this.eA[k];
-      const b = this.eB[k];
-      const [cx0, cx1] = range(x[a], x[b], this.eRad[k], this.gx0, cols);
-      const [cy0, cy1] = range(y[a], y[b], this.eRad[k], this.gy0, rows);
+      const cx0 = eCells[k * 4];
+      const cx1 = eCells[k * 4 + 1];
+      const cy0 = eCells[k * 4 + 2];
+      const cy1 = eCells[k * 4 + 3];
       for (let cy = cy0; cy <= cy1; cy++)
         for (let cx = cx0; cx <= cx1; cx++) {
           const c = cy * cols + cx;
           this.cellItems[fillPos[c]++] = k;
         }
     }
+    // 各ポリゴンの向き（符号付き面積の符号）: 内外判定の高速化に使う
+    if (this.polySign.length < this.polys.length) this.polySign = new Float64Array(this.polys.length * 2);
+    for (const p of this.polys) {
+      const idx = p.idx;
+      const m = idx.length;
+      let A = 0;
+      for (let k = 0; k < m; k++) {
+        const i = idx[k];
+        const j = idx[(k + 1) % m];
+        A += x[i] * y[j] - x[j] * y[i];
+      }
+      this.polySign[p.id] = A >= 0 ? 1 : -1;
+    }
   }
+  private eCells = new Int32Array(4096);
+  private polySign = new Float64Array(64);
   private static fillPos = new Int32Array(1);
 
   private pointInPoly(p: Poly, px: number, py: number): boolean {
@@ -720,7 +740,7 @@ export class World {
         const qx = x[a] + ex * t - pxi;
         const qy = y[a] + ey * t - pyi;
         const d2 = qx * qx + qy * qy;
-        const lim = r[i] + this.eRad[e] + 30;
+        const lim = r[i] + this.eRad[e] + 16;
         if (d2 > lim * lim) continue;
         const pid = this.ePoly[e];
         let k = 0;
@@ -752,6 +772,8 @@ export class World {
         const qx = x[a] + ex * t;
         const qy = y[a] + ey * t;
         const d = Math.hypot(x[i] - qx, y[i] - qy);
+        // 離れていて辺の外側にいるのが明らかなら厳密判定を省略（大半のケース）
+        if (d >= rad && t > 0.02 && t < 0.98 && (ex * (y[i] - y[a]) - ey * (x[i] - x[a])) * this.polySign[poly.id] < 0) continue;
         const inside = this.pointInPoly(poly, x[i], y[i]);
         if (!inside && d >= rad) continue;
         let nx: number;

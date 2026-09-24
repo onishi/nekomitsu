@@ -7,6 +7,10 @@ import { Game } from '../src/game';
 const drops = Number(process.argv[2] ?? 14);
 const interval = Number(process.argv[3] ?? 75);
 const game = new Game();
+const events: Record<string, number> = {};
+game.onCatEvent = (k) => {
+  events[k] = (events[k] ?? 0) + 1;
+};
 let stepMs = 0;
 let worst = 0;
 const dt = 1 / 60;
@@ -30,4 +34,5 @@ for (let f = 0; f < frames; f++) {
   }
   if (game.phase === 'cleared' && game.time - game.clearTime > 3) break;
 }
+console.log('events', JSON.stringify(events));
 console.log(`avg update ${(stepMs / frames).toFixed(2)}ms, worst ${worst.toFixed(1)}ms, particles=${game.world.n}`);

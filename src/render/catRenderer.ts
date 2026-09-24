@@ -316,6 +316,10 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean)
   const coat = cat.coat;
   const b = cat.species.b;
   const lp = cat.legPose;
+  // 香箱座りでは奥の足は隠れる: ぶら下がっているときだけ見せる
+  if (back && lp < 0.05) return;
+  ctx.save();
+  if (back) ctx.globalAlpha = Math.min(1, lp * 1.5);
   for (let k = 0; k < 2; k++) {
     const fi = cat.feet[k];
     const f = { x: w.x[fi], y: w.y[fi] };
@@ -346,7 +350,7 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean)
     // 肉球つきの手
     ctx.save();
     ctx.translate(foot.x, foot.y);
-    const pr = b * 0.23;
+    const pr = b * (0.19 + 0.04 * lp);
     ctx.beginPath();
     ctx.ellipse(0, 0, pr * 1.15, pr * 0.85, ang - Math.PI / 2 + (1 - lp) * Math.PI / 2, 0, TAU);
     ctx.fillStyle = back ? shade(coat.paw, -0.1) : coat.paw;
@@ -384,6 +388,7 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean)
     }
     ctx.restore();
   }
+  ctx.restore();
 }
 
 function drawTail(ctx: CanvasRenderingContext2D, cat: Cat): void {

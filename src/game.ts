@@ -1,6 +1,6 @@
 /** ゲーム進行: ステージ・猫の投下・充填率・クリア演出 */
 import { Sound } from './audio';
-import { Cat, type CatEnv } from './cat/cat';
+import { Cat, type CatEnv, type CatEvent } from './cat/cat';
 import { COATS, SPECIES, type Coat, type Species, type SpeciesKey } from './cat/catTypes';
 import { Bowl } from './physics/bowl';
 import { World } from './physics/world';
@@ -17,7 +17,18 @@ const STAGES: StageDef[] = [
   { R: 245, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
   { R: 270, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
   { R: 295, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
+  { R: 315, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
 ];
+
+/** URL の ?cat=long などで体型を固定できる（動作確認用） */
+const forcedSpecies = (() => {
+  try {
+    const k = new URLSearchParams(globalThis.location?.search ?? '').get('cat');
+    return k && k in SPECIES ? (k as SpeciesKey) : null;
+  } catch {
+    return null;
+  }
+})();
 
 export type Phase = 'playing' | 'judging' | 'cleared';
 
@@ -35,11 +46,14 @@ export class Game {
   private spawnTimer = 0;
   /** 吊るされた猫の登場アニメ 0..1 */
   private heldIntro = 1;
+  /** 判定中は吊るされた猫を上へ引っ込める 0..1 */
+  private heldHide = 0;
   fill = 0;
   private fillTimer = 0;
   phase: Phase = 'playing';
   private judgeTimer = 0;
   clearTime = 0;
+  clearFill = 0;
   squeeze = 0;
   dropsThisStage = 0;
   private lastCoats: string[] = [];
@@ -47,6 +61,7 @@ export class Game {
   private env: CatEnv;
   onClear: (() => void) | null = null;
   onFirstDrop: (() => void) | null = null;
+  onCatEvent: ((kind: CatEvent, cat: Cat, strength: number) => void) | null = null;
 
   constructor() {
     this.bowl = new Bowl(STAGES[0].R);
@@ -55,9 +70,11 @@ export class Game {
       time: 0,
       squeeze: 0,
       cleared: false,
+      event: (kind, cat, strength) => this.onCatEvent?.(kind, cat, strength),
       sound: {
         posu: (v) => this.sound.posu(v),
         munyu: (v) => this.sound.munyu(v),
+        supo: () => this.sound.supo(),
         purr: () => this.sound.purr(0.45),
       },
     };
@@ -87,6 +104,7 @@ export class Game {
     this.judgeTimer = 0;
     this.dropsThisStage = 0;
     this.env.cleared = false;
+    this.heldHide = 0;
     this.buildFillCells();
     this.spawnHeld();
     this.heldIntro = 1;
@@ -101,6 +119,7 @@ export class Game {
   }
 
   private pickSpecies(): Species {
+    if (forcedSpecies) return SPECIES[forcedSpecies];
     const kinds = this.stageDef.kinds;
     // 最初の1匹は「ふつうの猫」で核の体験を確実に
     if (this.dropsThisStage === 0 && this.stage === 1) return SPECIES.standard;
@@ -143,7 +162,7 @@ export class Game {
   }
 
   get canDrop(): boolean {
-    return this.phase === 'playing' && this.held !== null && this.heldIntro > 0.6;
+    return this.phase === 'playing' && this.held !== null && this.heldIntro > 0.6 && this.heldHide < 0.3;
   }
 
   drop(): void {
@@ -175,8 +194,9 @@ export class Game {
       this.dropVX = (this.dropX - prev) / dt;
       this.heldIntro = Math.min(1, this.heldIntro + dt * 3.2);
       const e = 1 - Math.pow(1 - this.heldIntro, 3);
-      const hide = this.phase !== 'playing' ? 1 : 0;
-      const y = this.dropY - (1 - e) * 200 - hide * 400;
+      const hideTarget = this.phase !== 'playing' ? 1 : 0;
+      this.heldHide += (hideTarget - this.heldHide) * Math.min(1, dt * 5);
+      const y = this.dropY - (1 - e) * 200 - this.heldHide * 420;
       // 移動に合わせてぶらーんと傾く
       const sway = Math.sin(this.time * 2.1) * 0.05;
       const ang = Math.max(-0.4, Math.min(0.4, -this.dropVX * 0.0007)) + sway;
@@ -218,6 +238,7 @@ export class Game {
         if (this.fill >= FILL_GOAL || this.overflowing()) {
           this.phase = 'cleared';
           this.clearTime = this.time;
+          this.clearFill = Math.max(this.fill, FILL_GOAL);
           this.env.cleared = true;
           this.sound.clear();
           if (this.onClear) this.onClear();

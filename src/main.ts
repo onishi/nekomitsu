@@ -1,6 +1,7 @@
 import './style.css';
 import { FILL_GOAL, Game } from './game';
 import { drawCat } from './render/catRenderer';
+import { Effects } from './render/effects';
 import { drawBackground, drawBowlBack, drawBowlFront, type View } from './render/scene';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -21,8 +22,10 @@ hint.textContent = coarse ? '左右に動かして、はなすと落ちる' : '�
 const game = new Game();
 const view: View = { scale: 1, ox: 0, oy: 0, dpr: 1, w: 1, h: 1 };
 
+/** 重い端末では描画解像度を自動で下げる */
+let maxDpr = 2;
 function layout(): void {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
   const w = window.innerWidth;
   const h = window.innerHeight;
   canvas.width = Math.round(w * dpr);
@@ -116,6 +119,7 @@ soundBtn.addEventListener('click', () => {
 restartBtn.addEventListener('click', () => {
   game.sound.unlock();
   game.restart();
+  fx.clear();
   clearEl.hidden = true;
   layout();
   restartBtn.blur();
@@ -123,6 +127,7 @@ restartBtn.addEventListener('click', () => {
 function goNext(): void {
   if (game.phase !== 'cleared' || performance.now() - clearShownAt < 900) return;
   game.nextStage();
+  fx.clear();
   clearEl.hidden = true;
   layout();
 }
@@ -136,7 +141,45 @@ game.onClear = () => {
 };
 game.onFirstDrop = () => hint.classList.add('fade');
 
+// --- 擬音・ハート ---
+const fx = new Effects();
+let lastText = -1;
+game.onCatEvent = (kind, cat, strength) => {
+  const sp = cat.species;
+  const t = game.time;
+  // 文字が重ならないように間引く（着地の「ぽすっ」を優先）
+  if (kind !== 'posu' && t - lastText < 0.7) return;
+  lastText = t;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  if (kind === 'posu') {
+    fx.text('ぽすっ', cat.cx + side * sp.a * 0.9, cat.body.maxY - sp.b * 0.5, 13 + strength * 7);
+  } else if (kind === 'munyu') {
+    fx.text('むにゅ', cat.cx + side * sp.a * 0.6, cat.cy - sp.b * 0.9, 15, '#c9786a');
+  } else {
+    fx.text('すぽっ', cat.cx, cat.cy - sp.b, 16, '#7a8fb5');
+  }
+};
+let heartTimer = 0;
+function updateEffects(dt: number): void {
+  fx.update(dt);
+  if (game.phase === 'cleared' && game.time - game.clearTime < 3 && game.cats.length) {
+    heartTimer -= dt;
+    if (heartTimer <= 0) {
+      heartTimer = 0.09;
+      const c = game.cats[Math.floor(Math.random() * game.cats.length)];
+      const h = c.headFrame();
+      fx.heart(h.x + (Math.random() - 0.5) * 20, h.y - c.species.headR * 1.2, 11 + Math.random() * 8);
+    }
+  }
+  if (game.phase === 'cleared' && game.time - game.clearTime < 0.02) {
+    fx.text('むにゅ〜っ', 0, game.bowl.R * 0.1, 34, '#d9785a');
+  }
+}
+
 // --- ループ ---
+// ?perf を付けると描画時間を計測（window.__perf）
+const perf = new URLSearchParams(location.search).has('perf') ? { render: 0, frames: 0 } : null;
+(window as unknown as { __perf: typeof perf }).__perf = perf;
 const DT = 1 / 60;
 let acc = 0;
 let last = performance.now();
@@ -150,12 +193,36 @@ function frame(now: number): void {
     if (keys.has('ArrowLeft')) game.targetX = Math.min(game.targetX, game.dropX) - 520 * DT;
     if (keys.has('ArrowRight')) game.targetX = Math.max(game.targetX, game.dropX) + 520 * DT;
     game.update(DT);
+    updateEffects(DT);
     acc -= DT;
     steps++;
   }
   if (steps === 3) acc = 0;
+  const r0 = performance.now();
   render();
+  adaptQuality(now, performance.now() - r0);
+  if (perf) {
+    perf.render += performance.now() - r0;
+    perf.frames++;
+  }
   requestAnimationFrame(frame);
+}
+
+let slowFrames = 0;
+let qualityChecks = 0;
+function adaptQuality(now: number, renderMs: number): void {
+  // 起動直後は除外し、描画が継続的に重ければ段階的に解像度を下げる
+  if (now < 4000 || maxDpr <= 1) return;
+  qualityChecks++;
+  if (renderMs > 12) slowFrames++;
+  if (qualityChecks >= 300) {
+    if (slowFrames > 150) {
+      maxDpr = Math.max(1, Math.min(maxDpr, window.devicePixelRatio || 1) - 0.5);
+      layout();
+    }
+    qualityChecks = 0;
+    slowFrames = 0;
+  }
 }
 
 function render(): void {
@@ -165,8 +232,9 @@ function render(): void {
   drawBowlBack(ctx, b);
   for (const c of game.cats) drawCat(ctx, c, game.time);
   drawBowlFront(ctx, b);
+  fx.draw(ctx);
   const h = game.held;
-  if (h) {
+  if (h && game.phase === 'playing') {
     // 落下地点のガイド
     ctx.save();
     ctx.setLineDash([4, 8]);
@@ -186,10 +254,12 @@ function render(): void {
   }
   // HUD
   stageNum.textContent = String(game.stage);
-  const pct = Math.round(game.fill * 100);
+  // クリア後は押し合いで数値が揺れないよう、クリア時の値を表示
+  const shownFill = game.phase === 'cleared' ? game.clearFill : game.fill;
+  const pct = Math.round(shownFill * 100);
   fillPct.textContent = `${pct}%`;
-  fillBar.style.width = `${Math.min(100, (game.fill / FILL_GOAL) * 100)}%`;
-  fillBar.classList.toggle('full', game.fill >= FILL_GOAL);
+  fillBar.style.width = `${Math.min(100, (shownFill / FILL_GOAL) * 100)}%`;
+  fillBar.classList.toggle('full', shownFill >= FILL_GOAL);
   catCount.textContent = `${game.cats.length}匹`;
 }
 

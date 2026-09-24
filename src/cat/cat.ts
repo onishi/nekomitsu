@@ -21,14 +21,18 @@ export type Expression =
   | 'bliss' // 顔が隣の猫に埋まる
   | 'happy'; // クリア
 
+export type CatEvent = 'posu' | 'munyu' | 'supo';
+
 export interface CatEnv {
   time: number;
+  event(kind: CatEvent, cat: Cat, strength: number): void;
   /** クリア演出のむにゅっ度 0..1 */
   squeeze: number;
   cleared: boolean;
   sound: {
     posu(v: number): void;
     munyu(v: number): void;
+    supo(): void;
     purr(): void;
   };
 }
@@ -99,6 +103,8 @@ export class Cat {
   headBuried = 0;
   cx = 0;
   cy = 0;
+  private slide = 0;
+  private slideArmed = false;
   /** 落としてからの経過時間 */
   age = 0;
   /** 尻尾の付け根の胴体粒子 */
@@ -420,6 +426,7 @@ export class Cat {
       // 着地の瞬間だけ体をぐっと柔らかく → 潰れてから反動で戻る
       this.firmness = clamp(0.62 - impact / 3000, 0.32, 0.6);
       env.sound.posu(clamp(impact / 1100, 0.15, 1));
+      env.event('posu', this, clamp(impact / 1100, 0.15, 1));
       if (ringHits > 0) this.munyuCooldown = 0;
     }
     // 急な速度変化 = 押された・ぶつけられた
@@ -432,12 +439,29 @@ export class Cat {
       this.pressTimer = Math.max(this.pressTimer, 0.9);
       if (this.munyuCooldown <= 0 && ringHits > 0) {
         env.sound.munyu(clamp(dv / 500, 0.2, 0.8));
+        env.event('munyu', this, clamp(dv / 500, 0.2, 0.8));
         this.munyuCooldown = 1.4;
       }
       this.calm = Math.min(this.calm, 1.2);
     }
     this.impactTimer -= dt;
     this.pressTimer -= dt;
+
+    // すぽっ: 落ち着きかけた猫が隙間へ滑り込んで、ぴたっと止まる
+    if (this.landed && this.impactTimer <= 0 && !env.cleared) {
+      if (vy > 60) {
+        // 一度落ち着いていた猫が動き出したときだけ数える
+        if (this.slide === 0) this.slideArmed = this.impactTimer < -0.6 && this.pressTimer <= 0;
+        this.slide += vy * dt;
+      } else if (vy < 12) {
+        if (this.slideArmed && this.slide > this.species.b * 0.45 && ringHits > 0) {
+          env.sound.supo();
+          env.event('supo', this, 1);
+          this.calm = Math.max(this.calm, 1);
+        }
+        this.slide = 0;
+      }
+    }
 
     // 「ぽすっ」は跳ねない: 着地後の上向きの重心運動と回転を吸収する
     if (this.landed && vy < -20) {
