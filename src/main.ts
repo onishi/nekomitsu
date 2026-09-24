@@ -1,6 +1,6 @@
 import './style.css';
 import { Game, type GameMode } from './game';
-import { OVER_SECONDS, type KeshiEvent } from './keshi';
+import type { KeshiEvent } from './keshi';
 import { drawCat, strokeCatSilhouette } from './render/catRenderer';
 import { Effects } from './render/effects';
 import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
@@ -357,6 +357,17 @@ function onKeshiEvent(e: KeshiEvent): void {
       const size = 34 + Math.min(6, e.chain) * 6;
       fx.text(`${e.chain}れんさ！`, 0, game.bowl.openY + game.bowl.R * 0.35, size, e.chain >= 4 ? '#e24a6a' : '#f0a02a', 1.6);
     }
+  } else if (e.kind === 'newcoat') {
+    // あたらしい猫が来るよ（難しくなる合図）
+    const y = game.bowl.openY + game.bowl.R * 0.25;
+    fx.text('あたらしい猫', 0, y, 30, '#e0784a', 2.2);
+    fx.text(e.coat.name, 0, y + 38, 24, '#8a5a3a', 2.2);
+    game.sound.clear();
+  } else if (e.kind === 'harder') {
+    const y = game.bowl.openY + game.bowl.R * 0.25;
+    fx.text('むずかしくなった！', 0, y, 28, '#e24a6a', 2.4);
+    fx.text(`${e.units}匹ぶんで消えるよ`, 0, y + 36, 20, '#8a5a3a', 2.4);
+    game.sound.clear();
   } else if (e.kind === 'gameover') {
     const k = game.keshi!;
     $('overScore').textContent = k.score.toLocaleString();
@@ -499,7 +510,7 @@ function render(): void {
 /** ねこけしの上限ライン。超えている間は赤く点滅し、残り時間のゲージが縮んでいく */
 function drawDangerLine(y: number, overTime: number): void {
   const w = game.bowl.openHalfW + 10;
-  const warn = Math.min(1, overTime / OVER_SECONDS);
+  const warn = Math.min(1, overTime / (game.keshi?.overLimit ?? 3));
   const blink = overTime > 0 ? 0.5 + 0.5 * Math.sin(game.time * 14) : 0;
   ctx.save();
   ctx.setLineDash([10, 8]);

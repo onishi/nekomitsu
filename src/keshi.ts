@@ -11,11 +11,32 @@ import { Cat } from './cat/cat';
 import { COATS, SPECIES, type Coat, type Species } from './cat/catTypes';
 import type { Game } from './game';
 
-/** ねこけしで使う毛色（色だけでなく柄でも見分けられる5種類） */
-export const KESHI_COATS: Coat[] = ['cha', 'kiji', 'kuro', 'shiro', 'hachi'].map((k) => COATS.find((c) => c.key === k)!);
+/**
+ * ねこけしで使う毛色（色だけでなく柄でも見分けられる）。この順に登場する。
+ * 最初は4種類で、落とした数に応じて増えていく（種類が多いほど同じ猫が隣り合いにくく、難しい）
+ */
+export const KESHI_COATS: Coat[] = ['cha', 'kiji', 'kuro', 'shiro', 'hachi', 'saba', 'mike'].map(
+  (k) => COATS.find((c) => c.key === k)!,
+);
 
-/** この大きさ（何匹ぶん）に達したら、ぽんっと消える */
+/** 落とした数 → 登場する毛色の数。[何匹目から, 種類数] */
+const COAT_STEPS: [number, number][] = [
+  [0, 4],
+  [20, 5],
+  [45, 6],
+  [75, 7],
+];
+
+/** 7種類そろった後は、上限ラインを超えていられる時間が少しずつ短くなる（3秒 → 最短1.8秒） */
+function overLimitFor(drops: number): number {
+  const extra = Math.max(0, drops - 100);
+  return Math.max(1.8, OVER_SECONDS - extra * 0.012);
+}
+
+/** この大きさ（何匹ぶん）に達したら、ぽんっと消える（150匹目からは4匹ぶん） */
 export const POP_UNITS = 3;
+const HARD_POP_UNITS = 4;
+const HARD_POP_FROM = 150;
 /** 上限ラインを超えたまま、この秒数たつとゲームオーバー */
 export const OVER_SECONDS = 3;
 
@@ -40,7 +61,7 @@ export function keshiSpecies(u: number): Species {
 }
 
 export interface KeshiEvent {
-  kind: 'merge' | 'pop' | 'gameover';
+  kind: 'merge' | 'pop' | 'gameover' | 'newcoat' | 'harder';
   x: number;
   y: number;
   /** 大きさ（何匹ぶん） */
@@ -88,8 +109,33 @@ export class Keshi {
     return this.game.bowl.openY + 4;
   }
 
+  /** いま登場する毛色の数 */
+  coatCount = COAT_STEPS[0][1];
+  /** 上限ラインを超えていられる時間（だんだん短くなる） */
+  overLimit = OVER_SECONDS;
+  /** 消えるのに必要な大きさ（何匹ぶん） */
+  popUnits = POP_UNITS;
+
   pickCoat(): Coat {
-    return KESHI_COATS[Math.floor(Math.random() * KESHI_COATS.length)];
+    const drops = this.game.dropsThisStage;
+    let n = COAT_STEPS[0][1];
+    for (const [from, count] of COAT_STEPS) if (drops >= from) n = count;
+    if (n > this.coatCount) {
+      // 新しい猫の登場。最初の1匹は必ずその猫にして、知らせる
+      this.coatCount = n;
+      const coat = KESHI_COATS[n - 1];
+      const b = this.game.bowl;
+      this.onEvent?.({ kind: 'newcoat', x: 0, y: b.openY, units: 1, coat, points: 0, chain: 0, size: 0 });
+      return coat;
+    }
+    this.overLimit = overLimitFor(drops);
+    if (drops >= HARD_POP_FROM && this.popUnits < HARD_POP_UNITS) {
+      // 終盤: 消えるにはもっと大きく育てる必要がある
+      this.popUnits = HARD_POP_UNITS;
+      const b = this.game.bowl;
+      this.onEvent?.({ kind: 'harder', x: 0, y: b.openY, units: HARD_POP_UNITS, coat: KESHI_COATS[0], points: 0, chain: 0, size: 0 });
+    }
+    return KESHI_COATS[Math.floor(Math.random() * n)];
   }
 
   /** 物理ステップの前: 融合中の2匹を引き寄せる */
@@ -186,7 +232,7 @@ export class Keshi {
         if (over) break;
       }
       this.overTime = over ? this.overTime + dt : Math.max(0, this.overTime - dt * 1.5);
-      if (this.overTime > OVER_SECONDS) this.endGame();
+      if (this.overTime > this.overLimit) this.endGame();
     }
   }
 
@@ -260,7 +306,7 @@ export class Keshi {
     this.addScore(points);
     this.onEvent?.({ kind: 'merge', x: cx, y: my, units: u, coat: c.coat, points, chain: chainNow, size: sp.a });
     game.sound.munyu(0.9);
-    if (u >= POP_UNITS) c.popTimer = 0.45;
+    if (u >= this.popUnits) c.popTimer = 0.45;
   }
 
   /** ぽんっ！ */

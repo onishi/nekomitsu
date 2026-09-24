@@ -670,7 +670,7 @@ export class World {
     }
     const cs = this.cellStart;
     cs.fill(0);
-    const margin = 34; // 粒子半径の上限目安（大きく融合した猫の足を含む） + 探索の余裕
+    const margin = 40; // 粒子半径の上限目安（大きく融合した猫の足を含む） + 探索の余裕
     const cell = this.cell;
     const cols = this.cols;
     const rows = this.rows;

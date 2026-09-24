@@ -134,7 +134,7 @@ export class Container {
       }
     }
     // 各セルの近くにある壁の辺（管のように壁が長い形でも、近くの辺だけ調べれば済む）
-    const reach = 26; // 粒子半径の上限 + 余裕
+    const reach = 34; // 粒子半径の上限（大きく融合した猫の足） + 余裕
     const lists: number[][] = Array.from({ length: this.gCols * this.gRows }, () => []);
     for (let k = 0; k < this.segAx.length; k++) {
       const x0 = Math.min(this.segAx[k], this.segBx[k]) - reach;
