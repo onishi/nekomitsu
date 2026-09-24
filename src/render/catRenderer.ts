@@ -313,9 +313,12 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number): 
   ctx.lineJoin = 'round';
   ctx.stroke();
 
-  drawLegs(ctx, cat, c, false);
+  // 毛繕い中は前足を顔の手前に
+  const pawOnTop = cat.groomPose > 0.3;
+  if (!pawOnTop) drawLegs(ctx, cat, c, false);
   if (tailFront) drawTail(ctx, cat);
   drawHead(ctx, cat, time);
+  if (pawOnTop) drawLegs(ctx, cat, c, false);
 }
 
 function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean): void {
@@ -341,7 +344,8 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean)
     const legW = b * 0.34;
     const color = back ? shade(coat.tuxedo ? coat.paw : coat.base, -0.1) : coat.tuxedo ? coat.paw : coat.base;
     // 脚（ぶら下がり時だけ見える長さ）
-    if (lp > 0.05 || back) {
+    const raised = !back && k === 0 ? cat.groomPose : 0;
+    if (lp > 0.05 || back || raised > 0.05) {
       ctx.save();
       ctx.translate(hip.x, hip.y);
       ctx.rotate(ang);
@@ -367,9 +371,13 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean)
     ctx.stroke();
     if (!back) {
       const glass = w.contact[fi] & CONTACT_BOWL;
-      if (glass) {
-        // ガラスにむぎゅっと押し付けられた肉球
-        const na = Math.atan2(-w.cny[fi], -w.cnx[fi]);
+      if (glass || raised > 0.5) {
+        // ガラスにむぎゅっと押し付けられた肉球 / 毛繕いで口元に向けた肉球
+        let na = Math.atan2(-w.cny[fi], -w.cnx[fi]);
+        if (raised > 0.5) {
+          const hf = cat.headFrame();
+          na = Math.atan2(hf.y - foot.y, hf.x - foot.x);
+        }
         ctx.rotate(na);
         ctx.fillStyle = '#f0a3a3';
         ctx.beginPath();
@@ -640,10 +648,10 @@ function drawFace(
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(angle);
-    if (e === 'sleep' || e === 'bliss' || e === 'happy' || open < 0.12) {
+    if (e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn' || open < 0.12) {
       // 閉じた目
       ctx.beginPath();
-      if (e === 'bliss' || e === 'happy') {
+      if (e === 'bliss' || e === 'happy' || e === 'groom') {
         // ^ ^ 気持ちよさそう
         ctx.moveTo(-erx, ery * 0.3);
         ctx.quadraticCurveTo(0, -ery * 1.0, erx, ery * 0.3);
@@ -730,6 +738,25 @@ function drawFace(
     ctx.ellipse(0, r * 0.2, r * 0.07, r * (e === 'startled' ? 0.09 : 0.07), 0, 0, TAU);
     ctx.fillStyle = '#8a3c3c';
     ctx.fill();
+  } else if (cat.yawnOpen > 0.05) {
+    // あくび: ふわぁ…と大きく開いた口
+    const yo = cat.yawnOpen;
+    ctx.beginPath();
+    ctx.moveTo(0, r * 0.06);
+    ctx.lineTo(0, r * 0.1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, r * (0.12 + 0.13 * yo), r * (0.1 + 0.06 * yo), r * 0.2 * yo + r * 0.02, 0, 0, TAU);
+    ctx.fillStyle = '#7a2f35';
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#ef8f98';
+    ctx.beginPath();
+    ctx.ellipse(0, r * (0.14 + 0.26 * yo), r * 0.12, r * 0.1 * yo + r * 0.01, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    ctx.stroke();
   } else {
     ctx.beginPath();
     ctx.moveTo(0, r * 0.06);
@@ -738,6 +765,31 @@ function drawFace(
     ctx.quadraticCurveTo(-r * 0.08, r * 0.22, 0, r * 0.11);
     ctx.quadraticCurveTo(r * 0.08, r * 0.22, r * 0.16, r * 0.12);
     ctx.stroke();
+    if (cat.tongue > 0.05) {
+      // ペロッ: 舌を出す（舐める相手の方へ少し向ける）
+      ctx.save();
+      ctx.translate(0, r * 0.14);
+      ctx.rotate(-cat.tongueSide * 0.45);
+      const tl = r * 0.24 * cat.tongue;
+      const tw = r * 0.085;
+      ctx.beginPath();
+      ctx.moveTo(-tw, 0);
+      ctx.lineTo(-tw, tl * 0.6);
+      ctx.quadraticCurveTo(-tw, tl + tw * 0.4, 0, tl + tw * 0.4);
+      ctx.quadraticCurveTo(tw, tl + tw * 0.4, tw, tl * 0.6);
+      ctx.lineTo(tw, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#ef8f98';
+      ctx.fill();
+      ctx.strokeStyle = '#b8565f';
+      ctx.lineWidth = r * 0.025;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, tl * 0.15);
+      ctx.lineTo(0, tl * 0.75);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
   ctx.restore();
 

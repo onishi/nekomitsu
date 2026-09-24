@@ -18,13 +18,20 @@ export type Expression =
   | 'squint' // 押されている
   | 'sleepy'
   | 'sleep'
-  | 'bliss' // 顔が隣の猫に埋まる
+  | 'bliss' // 顔が隣の猫に埋まる・舐められている
+  | 'groom' // 毛繕い・隣の猫を舐める
+  | 'yawn' // あくび
   | 'happy'; // クリア
 
-export type CatEvent = 'posu' | 'munyu' | 'supo';
+/** 落ち着いた猫が自分からするアクション */
+export type CatAction = 'none' | 'groom' | 'lick' | 'yawn';
+
+export type CatEvent = 'posu' | 'munyu' | 'supo' | 'lick';
 
 export interface CatEnv {
   time: number;
+  /** 金魚鉢の中の猫（舐める相手を探す） */
+  cats: readonly Cat[];
   event(kind: CatEvent, cat: Cat, strength: number): void;
   /** クリア演出のむにゅっ度 0..1 */
   squeeze: number;
@@ -108,6 +115,26 @@ export class Cat {
   headBuried = 0;
   cx = 0;
   cy = 0;
+  // --- アクション ---
+  action: CatAction = 'none';
+  private actionTime = 0;
+  private actionDur = 0;
+  private actionCooldown = 2 + Math.random() * 4;
+  /** 舐めている相手 */
+  lickTarget: Cat | null = null;
+  /** 舐められている（相手が気持ちよさそうにする） */
+  licked = 0;
+  /** 舌の出具合 0..1 */
+  tongue = 0;
+  /** 舌を向ける方向（頭ローカル、-1 左 / 1 右） */
+  tongueSide = 0;
+  /** 毛繕いで前足を口元へ上げる 0..1 */
+  groomPose = 0;
+  /** あくびの口の開き 0..1 */
+  yawnOpen = 0;
+  /** 頭の向きの目標（前半身に対する角度）。null なら自由 */
+  private headAim: number | null = null;
+  private wakeTimer = 10 + Math.random() * 15;
   private slide = 0;
   private slideArmed = false;
   /** 落としてからの経過時間 */
@@ -362,8 +389,13 @@ export class Cat {
       const ba = this.frontCluster.angle;
       let rel = clamp(wrapAngle(ang - ba), -0.8, 0.8);
       let out = ba + rel;
-      const up = wrapAngle(out);
-      out -= up * this.uprightHead;
+      if (this.headAim !== null) {
+        // アクション中: 頭をゆっくり目標の向きへ
+        out += wrapAngle(ba + this.headAim - out) * 0.12;
+      } else {
+        const up = wrapAngle(out);
+        out -= up * this.uprightHead;
+      }
       rel = clamp(wrapAngle(out - ba), -0.8, 0.8);
       return ba + rel;
     };
@@ -414,6 +446,15 @@ export class Cat {
       const s = this.footSlots[k];
       cl.restX[s] = this.footTuck[k].x + (this.footDangle[k].x - this.footTuck[k].x) * lp;
       cl.restY[s] = this.footTuck[k].y + (this.footDangle[k].y - this.footTuck[k].y) * lp;
+    }
+    // 毛繕い: 前足を口元へ
+    if (this.groomPose > 0.001) {
+      const s = this.footSlots[0];
+      const h = this.restLocal[this.headC - this.body.start];
+      const r = this.species.headR;
+      const g = this.groomPose;
+      cl.restX[s] += (h.x - r * 0.15 * this.facing - cl.restX[s]) * g;
+      cl.restY[s] += (h.y + r * 1.0 - cl.restY[s]) * g;
     }
     const tp = this.tailPose;
     for (let k = 0; k < this.tailSlots.length; k++) {
@@ -561,6 +602,7 @@ export class Cat {
     this.legPose += (legTarget - this.legPose) * Math.min(1, dt * (this.landed ? 10 : 6));
     // 着地したら足はふにゃっと（足がバネになって跳ねないように）
     for (const s of this.footSlots) this.bodyCluster.stiff[s] = this.landed ? 0.1 : 0.35;
+    this.bodyCluster.stiff[this.footSlots[0]] += 0.35 * this.groomPose;
     const tailTarget = this.landed ? smooth(1.5, 4, this.calm) : 0;
     this.tailPose += (tailTarget - this.tailPose) * Math.min(1, dt * 1.5);
     this.updatePoseRest();
@@ -601,6 +643,8 @@ export class Cat {
     const breath = sleeping ? 0.02 * Math.sin(env.time * 2.3 + this.phase) : 0;
     this.bodyArea.scale = (1 + breath) * (1 - 0.07 * env.squeeze);
 
+    this.updateAction(dt, env);
+
     // --- 表情 ---
     this.headBuried += ((headHits >= 3 ? 1 : 0) - this.headBuried) * Math.min(1, dt * 2);
     let e: Expression;
@@ -608,7 +652,9 @@ export class Cat {
     else if (!this.landed) e = 'surprised';
     else if (this.impactTimer > 0) e = 'startled';
     else if (this.pressTimer > 0 || squash > 1.9) e = 'squint';
-    else if (this.headBuried > 0.6 && this.calm > 1.5) e = 'bliss';
+    else if (this.action === 'yawn') e = 'yawn';
+    else if (this.action === 'groom' || this.action === 'lick') e = 'groom';
+    else if (this.licked > 0 || (this.headBuried > 0.6 && this.calm > 1.5)) e = 'bliss';
     else if (this.calm > 8) e = 'sleep';
     else if (this.calm > 4) e = 'sleepy';
     else e = 'normal';
@@ -618,7 +664,7 @@ export class Cat {
     }
     if (e !== 'sleep' && e !== 'bliss' && this.calm < 2) this.purred = false;
     this.expression = e;
-    this.blush += ((e === 'bliss' || e === 'happy' ? 1 : 0) - this.blush) * Math.min(1, dt * 2);
+    this.blush += ((e === 'bliss' || e === 'happy' || this.action === 'lick' ? 1 : 0) - this.blush) * Math.min(1, dt * 2);
     this.animateEyes(dt);
   }
 
@@ -629,7 +675,7 @@ export class Cat {
         ? 1.15
         : e === 'sleepy'
           ? 0.45
-          : e === 'sleep' || e === 'bliss' || e === 'happy'
+          : e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn'
             ? 0
             : e === 'squint'
               ? 0.25
@@ -642,6 +688,119 @@ export class Cat {
       this.blinkTimer = 2.5 + Math.random() * 4;
     }
     this.blink = Math.max(0, this.blink - dt * 7);
+  }
+
+  /**
+   * 落ち着いた猫のアクション（毛繕い・隣の猫を舐める・あくび）。
+   * 頭の向きと前足のポーズの目標を少し変えるだけで、動き自体は soft-body に任せる。
+   */
+  private updateAction(dt: number, env: CatEnv): void {
+    const w = this.world;
+    for (const i of this.head) {
+      w.ax[i] = 0;
+      w.ay[i] = 0;
+    }
+    this.licked = Math.max(0, this.licked - dt);
+    const canAct = this.landed && !env.cleared && this.impactTimer <= 0 && this.pressTimer <= 0;
+    if (this.action !== 'none') {
+      this.actionTime += dt;
+      // 強く押されたり、クリアしたら中断
+      if (!canAct || this.actionTime > this.actionDur || (this.action === 'lick' && !this.lickTarget)) this.endAction();
+    } else if (canAct) {
+      const asleep = this.calm > 8;
+      this.actionCooldown -= dt;
+      if (asleep) {
+        // 寝ていても、たまに起きて毛繕いする
+        this.wakeTimer -= dt;
+        if (this.wakeTimer <= 0) {
+          this.wakeTimer = 12 + Math.random() * 18;
+          if (Math.random() < 0.4) {
+            this.calm = 3;
+            this.actionCooldown = 0;
+          }
+        }
+      } else if (this.calm > 1.5 && this.actionCooldown <= 0) {
+        this.actionCooldown = 3 + Math.random() * 6;
+        const target = this.findLickTarget(env);
+        const r = Math.random();
+        if (target && r < 0.45) this.startAction('lick', 2.5 + Math.random() * 2, target);
+        else if (r < 0.8) this.startAction('groom', 2.5 + Math.random() * 2.5, null);
+        else this.startAction('yawn', 1.6, null);
+      }
+    }
+
+    // アクションごとの目標
+    const t = this.actionTime;
+    const f = this.facing;
+    let tongue = 0;
+    let groom = 0;
+    let yawn = 0;
+    this.headAim = null;
+    if (this.action === 'groom') {
+      // 頭を前足の方へ下げて、ペロペロ
+      groom = 1;
+      this.headAim = 0.3 * f + Math.sin(t * 9) * 0.1;
+      tongue = t > 0.4 ? 0.5 + 0.5 * Math.abs(Math.sin(t * 9)) : 0;
+      this.tongueSide = 0;
+    } else if (this.action === 'lick' && this.lickTarget) {
+      const o = this.lickTarget;
+      const hf = this.headFrame();
+      const dx = o.cx - hf.x;
+      const side = dx >= 0 ? 1 : -1;
+      this.headAim = 0.35 * side + Math.sin(t * 10) * 0.12;
+      tongue = t > 0.3 ? 0.55 + 0.45 * Math.abs(Math.sin(t * 10)) : 0;
+      this.tongueSide = side;
+      // 相手の方へ頭を少し寄せる
+      for (const i of this.head) {
+        w.ax[i] = side * 160;
+        w.ay[i] = (o.cy - hf.y > 0 ? 1 : -1) * 60;
+      }
+      if (t > 0.3) {
+        if (o.licked <= 0) env.event('lick', o, 1);
+        o.licked = 0.6;
+      }
+    } else if (this.action === 'yawn') {
+      // ふわぁ… 顔を上げて大きく口を開ける
+      const k = t / this.actionDur;
+      yawn = Math.sin(Math.min(1, k * 1.15) * Math.PI);
+      this.headAim = -0.25 * f * yawn;
+    }
+    this.tongue += (tongue - this.tongue) * Math.min(1, dt * 18);
+    this.groomPose += (groom - this.groomPose) * Math.min(1, dt * 4);
+    this.yawnOpen += (yawn - this.yawnOpen) * Math.min(1, dt * 10);
+  }
+
+  private startAction(a: CatAction, dur: number, target: Cat | null): void {
+    this.action = a;
+    this.actionTime = 0;
+    this.actionDur = dur;
+    this.lickTarget = target;
+  }
+
+  private endAction(): void {
+    this.action = 'none';
+    this.lickTarget = null;
+  }
+
+  /** 頭のすぐそばに体がある猫 */
+  private findLickTarget(env: CatEnv): Cat | null {
+    const w = this.world;
+    const hf = this.headFrame();
+    const reach = this.species.headR * 1.7;
+    let best: Cat | null = null;
+    let bestD = reach * reach;
+    for (const o of env.cats) {
+      if (o === this || !o.landed) continue;
+      if (o.body.maxX < hf.x - reach || o.body.minX > hf.x + reach || o.body.maxY < hf.y - reach || o.body.minY > hf.y + reach) continue;
+      for (const i of o.ring) {
+        const d = (w.x[i] - hf.x) ** 2 + (w.y[i] - hf.y) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          best = o;
+        }
+      }
+    }
+    return best;
   }
 
   /** 描画用: 輪郭粒子のゴール位置（前後の半身クラスタのゴールの平均） */

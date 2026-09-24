@@ -68,8 +68,12 @@ export class Game {
   constructor() {
     this.bowl = new Bowl(STAGES[0].R);
     this.world = new World(this.bowl);
+    const game = this;
     this.env = {
       time: 0,
+      get cats() {
+        return game.cats;
+      },
       squeeze: 0,
       cleared: false,
       event: (kind, cat, strength) => this.onCatEvent?.(kind, cat, strength),
@@ -180,7 +184,9 @@ export class Game {
     this.held = null;
     this.spawnTimer = 0.55;
     this.dropsThisStage++;
-    this.sound.drop();
+    // ニャー（小さい猫は高く、大きい猫は低く）
+    const sp = c.species;
+    this.sound.meow(Math.pow(58 * 36 / (sp.a * sp.b), 0.3) * (0.92 + Math.random() * 0.16));
     if (this.dropsThisStage === 1 && this.onFirstDrop) this.onFirstDrop();
   }
 

@@ -144,6 +144,12 @@ game.onFirstDrop = () => hint.classList.add('fade');
 
 // --- クリア時のハート ---
 const fx = new Effects();
+// 隣の猫に舐められると、小さなハート
+game.onCatEvent = (kind, cat) => {
+  if (kind !== 'lick') return;
+  const h = cat.headFrame();
+  fx.heart(h.x + (Math.random() - 0.5) * 16, h.y - cat.species.headR, 8 + Math.random() * 4);
+};
 let heartTimer = 0;
 function updateEffects(dt: number): void {
   fx.update(dt);
