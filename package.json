@@ -1,0 +1,19 @@
+{
+  "name": "nekomitsu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "猫は液体 — 金魚鉢に猫を落として、むにゅっと収まるのを眺める物理ゲーム",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "sim": "tsx tools/sim.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}
