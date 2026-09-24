@@ -21,7 +21,9 @@ export type Expression =
   | 'bliss' // 顔が隣の猫に埋まる・舐められている
   | 'groom' // 毛繕い・隣の猫を舐める
   | 'yawn' // あくび
-  | 'happy'; // クリア
+  | 'happy' // クリア
+  | 'grumpy' // 不機嫌な猫のふだんの顔（ジト目・へ の字口）
+  | 'annoyed'; // 不機嫌な猫が触られた・押された（イカ耳）
 
 /** 落ち着いた猫が自分からするアクション */
 export type CatAction = 'none' | 'groom' | 'lick' | 'yawn';
@@ -142,7 +144,13 @@ export class Cat {
   /** 尻尾の付け根の胴体粒子 */
   tailBase = -1;
 
-  constructor(world: World, species: Species, coat: Coat, facing: 1 | -1, x: number, y: number) {
+  /** 少し不機嫌な猫（出現率は低め）。ジト目で、触られるとイカ耳になり、他の猫を舐めない */
+  readonly grumpy: boolean;
+  /** 耳を倒す度合い 0..1（イカ耳） */
+  earFlat = 0;
+
+  constructor(world: World, species: Species, coat: Coat, facing: 1 | -1, x: number, y: number, grumpy = false) {
+    this.grumpy = grumpy;
     this.world = world;
     this.species = species;
     this.coat = coat;
@@ -663,9 +671,16 @@ export class Cat {
     else if (this.action === 'yawn') e = 'yawn';
     else if (this.action === 'groom' || this.action === 'lick') e = 'groom';
     else if (this.licked > 0 || (this.headBuried > 0.6 && this.calm > 1.5)) e = 'bliss';
-    else if (this.calm > 8) e = 'sleep';
-    else if (this.calm > 4) e = 'sleepy';
+    else if (this.calm > this.sleepAt) e = 'sleep';
+    else if (this.calm > this.sleepAt / 2) e = 'sleepy';
     else e = 'normal';
+    if (this.grumpy && this.landed) {
+      // 不機嫌な猫: 触られたり舐められたりするとイカ耳、ふだんはジト目。クリアしても機嫌は直らない
+      if (e === 'squint' || this.licked > 0) e = 'annoyed';
+      else if (e === 'normal' || e === 'bliss' || e === 'happy') e = 'grumpy';
+    }
+    const earTarget = e === 'annoyed' ? 1 : e === 'grumpy' ? 0.25 : 0;
+    this.earFlat += (earTarget - this.earFlat) * Math.min(1, dt * 10);
     if (e === 'sleep' && !this.purred) {
       this.purred = true;
       env.sound.purr();
@@ -673,6 +688,7 @@ export class Cat {
     if (e !== 'sleep' && e !== 'bliss' && this.calm < 2) this.purred = false;
     this.expression = e;
     this.blush += ((e === 'bliss' || e === 'happy' || this.action === 'lick' ? 1 : 0) - this.blush) * Math.min(1, dt * 2);
+    if (this.grumpy) this.blush = 0;
     this.animateEyes(dt);
   }
 
@@ -687,7 +703,9 @@ export class Cat {
             ? 0
             : e === 'squint'
               ? 0.25
-              : 1;
+              : e === 'annoyed'
+                ? 0.85
+                : 1;
     const rate = e === 'startled' ? 30 : e === 'sleep' ? 1.2 : 8;
     this.eyeOpen += (target - this.eyeOpen) * Math.min(1, dt * rate);
     this.blinkTimer -= dt;
@@ -715,7 +733,7 @@ export class Cat {
       // 強く押されたり、クリアしたら中断
       if (!canAct || this.actionTime > this.actionDur || (this.action === 'lick' && !this.lickTarget)) this.endAction();
     } else if (canAct) {
-      const asleep = this.calm > 8;
+      const asleep = this.calm > this.sleepAt;
       this.actionCooldown -= dt;
       if (asleep) {
         // 寝ていても、たまに起きて毛繕いする
@@ -731,7 +749,8 @@ export class Cat {
         this.actionCooldown = 3 + Math.random() * 6;
         const target = this.findLickTarget(env);
         const r = Math.random();
-        if (target && r < 0.45) this.startAction('lick', 2.5 + Math.random() * 2, target);
+        // 不機嫌な猫は他の猫を舐めない
+        if (target && r < 0.45 && !this.grumpy) this.startAction('lick', 2.5 + Math.random() * 2, target);
         else if (r < 0.8) this.startAction('groom', 2.5 + Math.random() * 2.5, null);
         else this.startAction('yawn', 1.6, null);
       }
@@ -795,6 +814,10 @@ export class Cat {
   }
   private pokeTimer = 0;
 
+  /** 寝つくまでの落ち着き時間（不機嫌な猫はなかなか寝ない） */
+  private get sleepAt(): number {
+    return this.grumpy ? 12 : 8;
+  }
   private lickSide = 0;
   private lickUp = 0;
 

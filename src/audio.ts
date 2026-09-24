@@ -211,6 +211,47 @@ export class Sound {
     setTimeout(() => this.purr(0.9), 500);
   }
 
+  /** 不機嫌な猫の「ウゥ…」（低いうなり） */
+  grumble(): void {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (t - this.lastGrumble < 0.8) return;
+    this.lastGrumble = t;
+    const dur = 0.55;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.linearRampToValueAtTime(175, t + dur * 0.4);
+    o.frequency.linearRampToValueAtTime(140, t + dur);
+    // ゴロゴロとは違う、ざらついた震え
+    const am = ctx.createGain();
+    am.gain.value = 0.6;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 32;
+    const lg = ctx.createGain();
+    lg.gain.value = 0.4;
+    lfo.connect(lg).connect(am.gain);
+    const f1 = ctx.createBiquadFilter();
+    f1.type = 'bandpass';
+    f1.frequency.value = 420;
+    f1.Q.value = 3;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35, t + 0.08);
+    g.gain.setValueAtTime(0.35, t + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f1).connect(am).connect(lp).connect(g).connect(this.master!);
+    o.start(t);
+    lfo.start(t);
+    o.stop(t + dur + 0.02);
+    lfo.stop(t + dur + 0.02);
+  }
+  private lastGrumble = 0;
+
   /** ニャー（pitch: 1 が標準、大きいほど高い声） */
   meow(pitch = 1): void {
     const ctx = this.ready();

@@ -491,12 +491,14 @@ function drawHead(ctx: CanvasRenderingContext2D, cat: Cat, time: number): void {
   const L = (lx: number, ly: number): Pt => ({ x: hf.x + cs * lx - sn * ly, y: hf.y + sn * lx + cs * ly });
 
   // 耳
+  // 不機嫌なときは耳を横に倒す（イカ耳）
+  const ef = cat.earFlat;
   for (const side of [-1, 1]) {
-    const baseAng = -Math.PI / 2 + side * 0.72;
+    const baseAng = -Math.PI / 2 + side * (0.72 + 0.22 * ef);
     const bx = Math.cos(baseAng) * r * 0.82;
     const by = Math.sin(baseAng) * r * 0.82;
-    const tipX = bx + side * r * 0.28;
-    const tipY = by - r * 0.72;
+    const tipX = bx + side * r * (0.28 + 0.5 * ef);
+    const tipY = by - r * (0.72 - 0.45 * ef);
     const e1 = L(bx - Math.sin(baseAng) * r * 0.4, by + Math.cos(baseAng) * r * 0.4);
     const e2 = L(bx + Math.sin(baseAng) * r * 0.4, by - Math.cos(baseAng) * r * 0.4);
     const tp = L(tipX, tipY);
@@ -668,6 +670,25 @@ function drawFace(
       const surprised = e === 'surprised' || e === 'startled';
       const h = ery * Math.min(open, 1.15);
       const wdt = erx * (surprised ? 1.05 : 1);
+      // 不機嫌: 上瞼がまっすぐ下りたジト目。怒っているときは目頭側が下がる
+      const lid = e === 'grumpy' || e === 'annoyed';
+      let lidL = 0;
+      let lidR = 0;
+      if (lid) {
+        const inner = e === 'annoyed' ? h * 0.2 : -h * 0.12;
+        const outer = e === 'annoyed' ? -h * 0.55 : -h * 0.12;
+        // 目頭は顔の中心側
+        lidL = side < 0 ? outer : inner;
+        lidR = side < 0 ? inner : outer;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(-wdt * 1.5, lidL - (lidR - lidL) * 0.25);
+        ctx.lineTo(wdt * 1.5, lidR + (lidR - lidL) * 0.25);
+        ctx.lineTo(wdt * 1.5, h * 2);
+        ctx.lineTo(-wdt * 1.5, h * 2);
+        ctx.closePath();
+        ctx.clip();
+      }
       // 目の形（アーモンド型、上瞼は少し水平）
       ctx.beginPath();
       if (surprised) {
@@ -709,6 +730,17 @@ function drawFace(
       ctx.strokeStyle = lineCol;
       ctx.lineWidth = r * 0.05;
       ctx.stroke();
+      if (lid) {
+        ctx.restore();
+        // 瞼の線
+        ctx.beginPath();
+        ctx.moveTo(-wdt * 1.05, lidL - (lidR - lidL) * 0.02);
+        ctx.lineTo(wdt * 1.05, lidR + (lidR - lidL) * 0.02);
+        ctx.strokeStyle = lineCol;
+        ctx.lineWidth = r * 0.065;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -756,6 +788,15 @@ function drawFace(
     ctx.ellipse(0, r * (0.14 + 0.26 * yo), r * 0.12, r * 0.1 * yo + r * 0.01, 0, 0, TAU);
     ctx.fill();
     ctx.restore();
+    ctx.stroke();
+  } else if (e === 'grumpy' || e === 'annoyed') {
+    // へ の字口
+    ctx.beginPath();
+    ctx.moveTo(0, r * 0.06);
+    ctx.lineTo(0, r * 0.12);
+    ctx.moveTo(-r * 0.15, r * 0.22);
+    ctx.quadraticCurveTo(-r * 0.07, r * 0.12, 0, r * 0.13);
+    ctx.quadraticCurveTo(r * 0.07, r * 0.12, r * 0.15, r * 0.22);
     ctx.stroke();
   } else {
     ctx.beginPath();

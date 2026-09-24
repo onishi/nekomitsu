@@ -12,6 +12,16 @@ export const FILL_GOAL = 1.0;
 /** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
 const KINDS: SpeciesKey[] = ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'];
 
+/** URL の ?grumpy=1 で全員不機嫌、?grumpy=0 で不機嫌な猫なし（動作確認用） */
+const forcedGrumpy = (() => {
+  try {
+    const v = new URLSearchParams(globalThis.location?.search ?? '').get('grumpy');
+    return v === null ? null : v === '1';
+  } catch {
+    return null;
+  }
+})();
+
 /** URL の ?shape=flask などで容器の形を固定できる（動作確認用） */
 const forcedShape = (() => {
   try {
@@ -107,7 +117,9 @@ export class Game {
       if (forcedShape) this.shape = { spec: { kind: forcedShape, variant: 0.5 }, area: this.shape.area };
     }
     // 表示していた猫は消さずに次へ持ち越す（必ず落とせる）
-    const carry = this.held ? { species: this.held.species, coat: this.held.coat, facing: this.held.facing } : null;
+    const carry = this.held
+      ? { species: this.held.species, coat: this.held.coat, facing: this.held.facing, grumpy: this.held.grumpy }
+      : null;
     this.stage = n;
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world.clear();
@@ -164,12 +176,14 @@ export class Game {
     return COATS[0];
   }
 
-  private spawnHeld(carry: { species: Species; coat: Coat; facing: 1 | -1 } | null = null): void {
+  private spawnHeld(carry: { species: Species; coat: Coat; facing: 1 | -1; grumpy: boolean } | null = null): void {
     const sp = carry ? carry.species : withGirth(this.pickSpecies());
     const coat = carry ? carry.coat : this.pickCoat();
     const facing: 1 | -1 = carry ? carry.facing : Math.random() < 0.5 ? 1 : -1;
+    // 少し不機嫌な猫はたまに（約12%）
+    const grumpy = carry ? carry.grumpy : forcedGrumpy ?? Math.random() < 0.12;
     this.dropX = this.clampX(this.targetX, sp);
-    const c = new Cat(this.world, sp, coat, facing, this.dropX, this.dropY);
+    const c = new Cat(this.world, sp, coat, facing, this.dropX, this.dropY, grumpy);
     this.held = c;
     this.heldIntro = 0;
     c.placeHeld(this.dropX, this.dropY - 200, 0);
@@ -253,7 +267,10 @@ export class Game {
         }
         if (f > 0.5) touched = true;
       }
-      if (touched && c.poke()) this.sound.munyu(0.35);
+      if (touched && c.poke()) {
+        if (c.grumpy) this.sound.grumble();
+        else this.sound.munyu(0.35);
+      }
     }
     // 指が止まっていれば引きずる力は弱まる
     st.vx *= 0.8;
