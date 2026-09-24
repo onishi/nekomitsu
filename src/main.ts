@@ -351,7 +351,6 @@ function onKeshiEvent(e: KeshiEvent): void {
     fx.text(`+${e.points}`, e.x, e.y - e.size * 0.6, 16, '#c9786a', 0.8);
   } else if (e.kind === 'pop') {
     fx.burst(e.x, e.y, e.size, [e.coat.base, e.coat.belly, e.coat.stripe ?? e.coat.line]);
-    fx.text('ぽんっ！', e.x, e.y - e.size * 0.2, 30 + Math.min(4, e.chain) * 4, '#e0784a');
     fx.text(`+${e.points.toLocaleString()}`, e.x, e.y + e.size * 0.45, 18, '#c9786a', 1.0);
     if (e.chain >= 2) {
       // 連鎖ほど大きく、目立つ色で
