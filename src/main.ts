@@ -1,7 +1,6 @@
 import './style.css';
 import { Game } from './game';
 import { drawCat } from './render/catRenderer';
-import { SHAPE_NAMES, type ShapeKind } from './physics/shapes';
 import { Effects } from './render/effects';
 import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
 
@@ -9,14 +8,15 @@ const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageNum = $('stageNum');
-const shapeName = $('shapeName');
 const hint = $('hint');
 const clearEl = $('clear');
 const soundBtn = $<HTMLButtonElement>('soundBtn');
 const nextBtn = $<HTMLButtonElement>('nextBtn');
 const coarse = window.matchMedia('(pointer: coarse)').matches;
 // 狭い画面では「／」の区切りで折り返す
-const hintParts = coarse ? ['外をタップで落とす', '中をなぞって混ぜる'] : ['クリックで落とす（← → / Space）', '鉢の中をドラッグで混ぜる'];
+const hintParts = coarse
+  ? ['タップで落とす', '鉢の中を長押しでかき混ぜる']
+  : ['クリックで落とす（← → / Space）', '鉢の中を長押しでかき混ぜる'];
 hint.replaceChildren(
   ...hintParts.flatMap((t, i) => {
     const span = document.createElement('span');
@@ -57,53 +57,76 @@ function layout(): void {
 window.addEventListener('resize', layout);
 
 // --- 入力 ---
-// 容器の外を触る: 猫を左右に動かして、離すと落とす
-// 容器の中を触る: 中の猫をつついたり、なぞってかき混ぜたりする
+// ・短いタップ / クリック: どこを触っても猫を落とす（ドラッグで狙ってから離しても落ちる）
+// ・容器の中を長押し: 落とさずに、中の猫をかき混ぜる
+const LONG_PRESS_MS = 300;
+const MOVE_TOLERANCE = 10; // これ以上動いたら長押しではなく「狙って落とす」
 function toWorldX(clientX: number): number {
   return (clientX - view.ox) / view.scale;
 }
 function toWorldY(clientY: number): number {
   return (clientY - view.oy) / view.scale;
 }
-let pointerDown = false;
-let stirring = false;
+type PressMode = 'none' | 'pending' | 'aim' | 'stir';
+let mode: PressMode = 'none';
+let downX = 0;
+let downY = 0;
+let lastX = 0;
+let lastY = 0;
+let longTimer = 0;
+/** 長押しの溜め表示（容器の中を押している間） */
+const press = { active: false, x: 0, y: 0, t0: 0 };
+
+function startStir(): void {
+  if (mode !== 'pending') return;
+  mode = 'stir';
+  press.active = false;
+  game.stirStart(toWorldX(lastX), toWorldY(lastY), performance.now());
+}
+function endPress(): void {
+  clearTimeout(longTimer);
+  press.active = false;
+  if (mode === 'stir') game.stirEnd();
+  mode = 'none';
+}
 canvas.addEventListener('pointerdown', (e) => {
   game.sound.unlock();
   canvas.setPointerCapture(e.pointerId);
+  endPress();
+  downX = lastX = e.clientX;
+  downY = lastY = e.clientY;
+  mode = 'pending';
   const wx = toWorldX(e.clientX);
   const wy = toWorldY(e.clientY);
   if (game.isInside(wx, wy)) {
-    stirring = true;
-    game.stirStart(wx, wy, e.timeStamp);
-    return;
+    longTimer = window.setTimeout(startStir, LONG_PRESS_MS);
+    Object.assign(press, { active: true, x: wx, y: wy, t0: performance.now() });
   }
-  pointerDown = true;
-  game.targetX = wx;
 });
 canvas.addEventListener('pointermove', (e) => {
-  if (stirring) {
-    game.stirMove(toWorldX(e.clientX), toWorldY(e.clientY), e.timeStamp);
+  lastX = e.clientX;
+  lastY = e.clientY;
+  if (mode === 'stir') {
+    game.stirMove(toWorldX(e.clientX), toWorldY(e.clientY), performance.now());
     return;
   }
-  if (e.pointerType === 'mouse' || pointerDown) game.targetX = toWorldX(e.clientX);
+  if (mode === 'pending' && Math.hypot(e.clientX - downX, e.clientY - downY) > MOVE_TOLERANCE) {
+    clearTimeout(longTimer);
+    press.active = false;
+    mode = 'aim';
+  }
+  if (mode === 'aim' || e.pointerType === 'mouse') game.targetX = toWorldX(e.clientX);
 });
 canvas.addEventListener('pointerup', (e) => {
-  if (stirring) {
-    stirring = false;
-    game.stirEnd();
-    return;
+  const m = mode;
+  endPress();
+  if (m === 'pending' || m === 'aim') {
+    game.targetX = toWorldX(e.clientX);
+    // タッチは指を離した位置に落とす。マウスは既に追従しているのでそのまま
+    game.drop(e.pointerType !== 'mouse');
   }
-  if (!pointerDown) return;
-  pointerDown = false;
-  game.targetX = toWorldX(e.clientX);
-  // タッチは指を離した位置に落とす。マウスは既に追従しているのでそのまま
-  game.drop(e.pointerType !== 'mouse');
 });
-canvas.addEventListener('pointercancel', () => {
-  pointerDown = false;
-  stirring = false;
-  game.stirEnd();
-});
+canvas.addEventListener('pointercancel', endPress);
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -241,6 +264,17 @@ function render(): void {
   for (const c of game.cats) drawCat(ctx, c, game.time);
   drawBowlFront(ctx, b);
   fx.draw(ctx);
+  if (press.active) {
+    // 長押しの溜め: 輪が一周するとかき混ぜ開始（短いタップでは出さない）
+    const k = (performance.now() - press.t0 - 80) / (LONG_PRESS_MS - 80);
+    if (k > 0) {
+      ctx.beginPath();
+      ctx.arc(press.x, press.y, Game.STIR_R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, k));
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+  }
   if (game.stir.active) {
     // かき混ぜている指
     const st = game.stir;
@@ -268,7 +302,6 @@ function render(): void {
   }
   // HUD
   stageNum.textContent = String(game.stage);
-  shapeName.textContent = SHAPE_NAMES[game.bowl.kind as ShapeKind] ?? '';
 }
 
 layout();

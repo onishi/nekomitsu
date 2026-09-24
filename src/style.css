@@ -1,3 +1,11 @@
+/* タイトル用の筆文字 Yuji Syuku（SIL Open Font License）。「ねこみつ」の4文字だけを収録したサブセット */
+@font-face {
+  font-family: 'Yuji Syuku';
+  src: url('./assets/yuji-syuku-nekomitsu.woff2') format('woff2');
+  font-display: swap;
+  unicode-range: U+3053, U+3064, U+306d, U+307f;
+}
+
 :root {
   --ink: #5a4032;
   --paper: rgba(255, 251, 244, 0.86);
@@ -54,7 +62,7 @@ body {
   white-space: nowrap;
 }
 
-/* STAGE 3 ｜ 三角フラスコ */
+/* STAGE 3 */
 .stage .label {
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -67,15 +75,30 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.stage .shape {
-  font-size: 14px;
-  margin-left: 12px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
+/* 上部中央のタイトル（筆文字） */
+.title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -52%);
+  margin: 0;
+  font-family: 'Yuji Syuku', 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', serif;
+  font-weight: 400;
+  font-size: 32px;
+  letter-spacing: 0.14em;
+  padding-left: 0.14em;
+  color: #5a3a2a;
+  text-shadow:
+    0 0 6px rgba(255, 250, 240, 0.95),
+    0 1px 0 rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
-.stage .shape:empty {
-  display: none;
+@media (max-width: 360px) {
+  .title {
+    font-size: 26px;
+  }
 }
 
 #soundBtn {
