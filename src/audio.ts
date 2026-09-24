@@ -12,6 +12,7 @@ export class Sound {
   private lastMunyu = 0;
   private lastPurr = 0;
   private lastPosu = 0;
+  private createdAt = 0;
   private lastSupo = 0;
 
   /** ユーザー操作のハンドラ内で呼ぶ */
@@ -27,6 +28,7 @@ export class Sound {
     } catch {
       return;
     }
+    this.createdAt = performance.now();
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.6;
     this.master.connect(this.ctx.destination);
@@ -34,6 +36,12 @@ export class Sound {
     this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    // 作った直後は一時停止中のことがある（特に iOS）。操作の中で再開させ、無音を一度鳴らして解放する
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    const silent = this.ctx.createBufferSource();
+    silent.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+    silent.connect(this.ctx.destination);
+    silent.start();
   }
 
   setEnabled(on: boolean): void {
@@ -42,7 +50,13 @@ export class Sound {
   }
 
   private ready(): AudioContext | null {
-    if (!this.enabled || !this.ctx || !this.master || this.ctx.state !== 'running') return null;
+    if (!this.enabled || !this.ctx || !this.master || this.ctx.state === 'closed') return null;
+    // 再開待ち（最初のタップ直後など）でも音は予約しておく。時間が止まっているので、再開と同時に鳴る
+    // （作った直後だけ。それ以外で止まっているときは鳴らさない＝あとでまとめて鳴らない）
+    if (this.ctx.state !== 'running') {
+      void this.ctx.resume();
+      if (performance.now() - this.createdAt > 1500) return null;
+    }
     return this.ctx;
   }
 
