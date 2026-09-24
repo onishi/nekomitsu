@@ -146,6 +146,35 @@ export class Cat {
   /** 尻尾の付け根の胴体粒子 */
   tailBase = -1;
 
+  // --- ねこけし ---
+  /** 何匹ぶんの大きさか（融合すると足し算） */
+  units = 1;
+  /** 融合中の相手 */
+  fusing: Cat | null = null;
+  /** 大きくなりすぎて消えるまでの時間（-1 = 消えない） */
+  popTimer = -1;
+  /** 消える直前にふくらむ量 */
+  inflate = 0;
+
+  /** シェイプマッチングのゴールを今の粒子位置にそろえる（物理を1度も解いていない猫を描くため） */
+  syncGoals(): void {
+    const w = this.world;
+    for (const cl of this.body.clusters) {
+      for (let k = 0; k < cl.idx.length; k++) {
+        cl.goalX[k] = w.x[cl.idx[k]];
+        cl.goalY[k] = w.y[cl.idx[k]];
+      }
+    }
+  }
+
+  /** world.removeBody で前の粒子が詰められたとき、番号をずらす */
+  shiftIndices(removedStart: number, count: number): void {
+    const sh = (i: number) => (i >= removedStart + count ? i - count : i);
+    for (const arr of [this.ring, this.head, this.feet, this.tail]) for (let k = 0; k < arr.length; k++) arr[k] = sh(arr[k]);
+    this.headC = sh(this.headC);
+    this.tailBase = sh(this.tailBase);
+  }
+
   /** 少し不機嫌な猫（出現率は低め）。ジト目で、触られるとイカ耳になり、他の猫を舐めない */
   readonly grumpy: boolean;
   /** 吊るした姿勢での、中心からの左端・右端（左端は負） */
@@ -721,6 +750,9 @@ export class Cat {
     // 細くして落とした猫: 口を通り抜けたら（着地したら）ゆっくり本来の体型へ
     if (this.restSx < 1 && (this.landed || this.cy > env.rimY + this.species.b)) {
       this.restSx = Math.min(1, this.restSx + dt * 1.2);
+    } else if (this.restSx > 1) {
+      // ねこけし: 融合直後の横長の体が、むにゅっと本来の猫の形へ
+      this.restSx = Math.max(1, this.restSx - dt * 1.4);
     }
     // 着地したら足はふにゃっと（足がバネになって跳ねないように）
     for (const s of this.footSlots) this.bodyCluster.stiff[s] = this.landed ? 0.1 : 0.35;
@@ -763,7 +795,7 @@ export class Cat {
     // --- 呼吸・クリア時のむにゅっ ---
     const sleeping = this.expression === 'sleep' || this.expression === 'happy';
     const breath = sleeping ? 0.02 * Math.sin(env.time * 2.3 + this.phase) : 0;
-    this.bodyArea.scale = (1 + breath) * (1 - 0.05 * env.squeeze) * Math.sqrt(this.restSx);
+    this.bodyArea.scale = (1 + breath) * (1 - 0.05 * env.squeeze) * Math.sqrt(Math.min(1, this.restSx)) * (1 + this.inflate);
 
     this.updateAction(dt, env);
 

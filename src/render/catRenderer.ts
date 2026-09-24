@@ -135,7 +135,28 @@ function bodyPath(ctx: CanvasRenderingContext2D, p: Pt[], fluff: number, c: Pt):
 let gx = new Float64Array(64);
 let gy = new Float64Array(64);
 
-export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number): void {
+/**
+ * 胴体の輪郭だけを太く描く（ねこけしで融合中の2匹用）。
+ * 2匹ぶんの輪郭を先に描いてから、outline なしで2匹を描くと、重なった所の境目が消えて
+ * 1つのかたまりの輪郭になる（境界がむにゅっと溶けて見える）。
+ */
+export function strokeCatSilhouette(ctx: CanvasRenderingContext2D, cat: Cat): void {
+  if (gx.length < cat.ring.length) {
+    gx = new Float64Array(64);
+    gy = new Float64Array(64);
+  }
+  cat.ringGoals(gx, gy);
+  const ring = displayRing(cat, cat.ring, gx, gy, cat.held ? 0 : 0.3, cat.ringR * 0.95);
+  const c = centroid(ring);
+  ctx.beginPath();
+  bodyPath(ctx, ring, cat.species.fluff * 7, c);
+  ctx.lineWidth = 3.4;
+  ctx.strokeStyle = cat.coat.line;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, outline = true): void {
   const w = cat.world;
   const sp = cat.species;
   const coat = cat.coat;
@@ -306,12 +327,14 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number): 
     ctx.fillRect(c.x - sp.a * 3, c.y - sp.a * 3, sp.a * 6, sp.a * 6);
   }
   ctx.restore();
-  ctx.beginPath();
-  bodyPath(ctx, ring, fl, c);
-  ctx.lineWidth = lineW;
-  ctx.strokeStyle = coat.line;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
+  if (outline) {
+    ctx.beginPath();
+    bodyPath(ctx, ring, fl, c);
+    ctx.lineWidth = lineW;
+    ctx.strokeStyle = coat.line;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
 
   // 毛繕い中は前足を顔の手前に
   const pawOnTop = cat.groomPose > 0.3;

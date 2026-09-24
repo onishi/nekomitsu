@@ -5,6 +5,8 @@ import { COATS, SPECIES, withGirth, type Coat, type Species, type SpeciesKey } f
 import type { Container } from './physics/container';
 import { buildContainer, SHAPE_NAMES, stageShape, type ShapeKind, type ShapeSpec } from './physics/shapes';
 import { World } from './physics/world';
+import { Keshi, keshiSpecies } from './keshi';
+import { BASE_AREA } from './physics/shapes';
 
 /** 充填率がこれを超えたらクリア（猫の量が金魚鉢の容量を超える = はみ出す） */
 export const FILL_GOAL = 1.0;
@@ -42,9 +44,15 @@ const forcedSpecies = (() => {
   }
 })();
 
-export type Phase = 'playing' | 'judging' | 'cleared';
+export type Phase = 'playing' | 'judging' | 'cleared' | 'gameover';
+
+/** ねこみつ（猫でいっぱいにする）/ ねこけし（同じ猫をくっつけて消す） */
+export type GameMode = 'mitsu' | 'keshi';
 
 export class Game {
+  mode: GameMode = 'mitsu';
+  /** ねこけしの進行（ねこみつでは null） */
+  keshi: Keshi | null = null;
   stage = 1;
   /** 容器（金魚鉢・フラスコ…） */
   bowl: Container;
@@ -84,6 +92,8 @@ export class Game {
   /** 指の半径と、動きが伝わる範囲 */
   static readonly STIR_R = 24;
   static readonly STIR_REACH = 75;
+  /** ねこけしの金魚鉢の大きさ（ねこみつ1面の何倍の容量か） */
+  static KESHI_AREA = 2.0;
 
   constructor() {
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
@@ -115,6 +125,49 @@ export class Game {
     return this.bowl.openY - this.bowl.R * 0.72;
   }
 
+  /** モードを選んで最初から始める */
+  startMode(mode: GameMode): void {
+    this.mode = mode;
+    this.held = null;
+    if (mode === 'keshi') this.startKeshi();
+    else {
+      this.keshi = null;
+      this.startStage(1);
+    }
+  }
+
+  /** ねこけし: いつも同じ金魚鉢で、ゲームオーバーまで続ける */
+  private startKeshi(): void {
+    this.keshi = new Keshi(this);
+    this.stage = 1;
+    this.shape = { spec: { kind: 'fishbowl', variant: 0.5 }, area: BASE_AREA * Game.KESHI_AREA };
+    this.bowl = buildContainer(this.shape.spec, this.shape.area);
+    this.world.clear();
+    this.world.setBowl(this.bowl);
+    this.world.gravityScale = 1;
+    this.cats = [];
+    this.held = null;
+    this.stir.active = false;
+    this.phase = 'playing';
+    this.fill = 0;
+    this.squeeze = 0;
+    this.dropsThisStage = 0;
+    this.env.cleared = false;
+    this.spawnHeld();
+    this.heldIntro = 1;
+  }
+
+  /** 猫を金魚鉢から取り除く（ねこけしの融合・消滅） */
+  removeCat(c: Cat): void {
+    this.keshi?.forget(c);
+    const i = this.cats.indexOf(c);
+    if (i >= 0) this.cats.splice(i, 1);
+    const { start, count } = this.world.removeBody(c.body);
+    for (const o of this.cats) o.shiftIndices(start, count);
+    if (this.held) this.held.shiftIndices(start, count);
+    for (const o of this.cats) if (o.lickTarget === c) o.lickTarget = null;
+  }
+
   /** keepShape: リスタート時は同じ形・大きさのまま */
   startStage(n: number, keepShape = false): void {
     if (!keepShape || n !== this.stage) {
@@ -144,10 +197,9 @@ export class Game {
     this.heldIntro = 1;
   }
 
-  /** 最初から（ステージ1、新しい猫で） */
+  /** 最初から（いまのモードで、新しい猫で） */
   reset(): void {
-    this.held = null;
-    this.startStage(1);
+    this.startMode(this.mode);
   }
 
   nextStage(): void {
@@ -170,6 +222,7 @@ export class Game {
   }
 
   private pickCoat(): Coat {
+    if (this.keshi) return this.keshi.pickCoat();
     for (let tries = 0; tries < 10; tries++) {
       const c = COATS[Math.floor(Math.random() * COATS.length)];
       if (!this.lastCoats.includes(c.key)) {
@@ -182,7 +235,7 @@ export class Game {
   }
 
   private spawnHeld(carry: { species: Species; coat: Coat; facing: 1 | -1; grumpy: boolean } | null = null): void {
-    const sp = carry ? carry.species : withGirth(this.pickSpecies());
+    const sp = carry ? carry.species : this.keshi ? keshiSpecies(1) : withGirth(this.pickSpecies());
     const coat = carry ? carry.coat : this.pickCoat();
     const facing: 1 | -1 = carry ? carry.facing : Math.random() < 0.5 ? 1 : -1;
     // 少し不機嫌な猫はたまに（約12%）
@@ -229,8 +282,8 @@ export class Game {
   }
 
   get canDrop(): boolean {
-    // 表示している猫は判定中でもクリア後でも落とせる
-    return this.held !== null && this.heldIntro > 0.6;
+    // 表示している猫は判定中でもクリア後でも落とせる（ねこけしのゲームオーバー後は落とせない）
+    return this.held !== null && this.heldIntro > 0.6 && this.phase !== 'gameover';
   }
 
   /** 容器の中（口より下）を触ったか */
@@ -335,7 +388,7 @@ export class Game {
 
     // 吊るされた猫
     // クリアしたら次の猫は出さない（表示中の猫は落とせる）
-    if (!this.held && this.phase !== 'cleared') {
+    if (!this.held && this.phase !== 'cleared' && this.phase !== 'gameover') {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) this.spawnHeld();
     }
@@ -361,8 +414,14 @@ export class Game {
     if (this.held) this.held.update(dt, this.env);
 
     this.applyStir();
+    this.keshi?.beforeStep(dt);
     this.world.beginFrame();
     this.world.step();
+
+    if (this.keshi) {
+      this.keshi.afterStep(dt);
+      return;
+    }
 
     // 充填率
     this.fillTimer -= dt;

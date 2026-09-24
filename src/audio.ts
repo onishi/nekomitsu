@@ -266,6 +266,74 @@ export class Sound {
   }
   private lastGrumble = 0;
 
+  /** ぽんっ！（ねこけしで大きな猫が消える）。連鎖するほど高く、きらきらが増える */
+  pop(chain = 1): void {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const up = Math.pow(1.12, Math.min(8, chain - 1));
+    // ぽ: 泡がはじけるような上昇音
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(320 * up, t);
+    o.frequency.exponentialRampToValueAtTime(1300 * up, t + 0.07);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.45, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    o.connect(g).connect(this.master!);
+    o.start(t);
+    o.stop(t + 0.18);
+    // んっ: 短いノイズのはじけ
+    const n = this.noiseSrc(ctx);
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'bandpass';
+    hp.frequency.value = 2500 * up;
+    hp.Q.value = 1.2;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(0.25, t + 0.005);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    n.connect(hp).connect(ng).connect(this.master!);
+    n.start(t, Math.random());
+    n.stop(t + 0.1);
+    // 連鎖: きらきら
+    const notes = [1046.5, 1318.5, 1568, 2093];
+    for (let k = 0; k < Math.min(4, chain); k++) {
+      const s = t + 0.06 + k * 0.06;
+      const b = ctx.createOscillator();
+      b.type = 'triangle';
+      b.frequency.value = notes[k] * up;
+      const bg = ctx.createGain();
+      bg.gain.setValueAtTime(0.0001, s);
+      bg.gain.exponentialRampToValueAtTime(0.12, s + 0.01);
+      bg.gain.exponentialRampToValueAtTime(0.0001, s + 0.4);
+      b.connect(bg).connect(this.master!);
+      b.start(s);
+      b.stop(s + 0.42);
+    }
+  }
+
+  /** ゲームオーバー（ねこけし）: ゆっくり下がる音 */
+  gameOver(): void {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [659.25, 523.25, 440, 349.23].forEach((fq, k) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = fq;
+      const g = ctx.createGain();
+      const s = t + k * 0.18;
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(0.18, s + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
+      o.connect(g).connect(this.master!);
+      o.start(s);
+      o.stop(s + 0.55);
+    });
+  }
+
   /** ニャー（pitch: 1 が標準、大きいほど高い声） */
   meow(pitch = 1): void {
     const ctx = this.ready();

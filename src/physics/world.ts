@@ -213,7 +213,8 @@ export class ShapeCluster {
 }
 
 export class SoftBody {
-  readonly id: number;
+  /** bodies 配列での位置（体を取り除くと振り直す） */
+  id: number;
   start = 0;
   count = 0;
   dA: number[] = [];
@@ -224,6 +225,8 @@ export class SoftBody {
   areas: AreaConstraint[] = [];
   polys: Poly[] = [];
   kinematic = false;
+  /** この体とは当たらない（ねこけしで融合中の相手） */
+  ghostWith: SoftBody | null = null;
   /** 内部振動の減衰（1/s）。重心運動は減衰させない */
   internalDamping = 3;
   friction = 0.3;
@@ -322,6 +325,44 @@ export class World {
     this.cols = Math.ceil((hw * 2) / this.cell) + 1;
     this.rows = Math.ceil((bowl.bottomY + bowl.R * 0.3 - this.gy0) / this.cell) + 1;
     this.cellStart = new Int32Array(this.cols * this.rows + 1);
+  }
+
+  /**
+   * 体を1つ取り除く（ねこけしの融合・消滅）。後ろの体の粒子を詰めるので、
+   * 粒子の番号を持っている側（猫）は removed の範囲より後ろの番号を count だけずらすこと。
+   */
+  removeBody(body: SoftBody): { start: number; count: number } {
+    const s = body.start;
+    const c = body.count;
+    const n = this.n;
+    for (const a of [this.x, this.y, this.px, this.py, this.vx, this.vy, this.w, this.mass, this.r, this.ax, this.ay]) a.copyWithin(s, s + c, n);
+    this.owner.copyWithin(s, s + c, n);
+    this.contact.copyWithin(s, s + c, n);
+    this.catHits.copyWithin(s, s + c, n);
+    this.cnx.copyWithin(s, s + c, n);
+    this.cny.copyWithin(s, s + c, n);
+    this.n = n - c;
+    this.bodies.splice(this.bodies.indexOf(body), 1);
+    this.polys = this.polys.filter((p) => p.body !== body);
+    this.polys.forEach((p, k) => (p.id = k));
+    const sh = (i: number) => (i >= s + c ? i - c : i);
+    for (const b of this.bodies) {
+      if (b.ghostWith === body) b.ghostWith = null;
+      if (b.start < s) continue;
+      b.start -= c;
+      for (let k = 0; k < b.dA.length; k++) {
+        b.dA[k] = sh(b.dA[k]);
+        b.dB[k] = sh(b.dB[k]);
+      }
+      for (const cl of b.clusters) for (let k = 0; k < cl.idx.length; k++) cl.idx[k] = sh(cl.idx[k]);
+      for (const a of b.areas) for (let k = 0; k < a.idx.length; k++) a.idx[k] = sh(a.idx[k]);
+      for (const p of b.polys) for (let k = 0; k < p.idx.length; k++) p.idx[k] = sh(p.idx[k]);
+    }
+    this.bodies.forEach((b, k) => {
+      b.id = k;
+      for (let i = b.start; i < b.start + b.count; i++) this.owner[i] = k;
+    });
+    return { start: s, count: c };
   }
 
   clear(): void {
@@ -629,7 +670,7 @@ export class World {
     }
     const cs = this.cellStart;
     cs.fill(0);
-    const margin = 28; // 粒子半径の上限目安 + 探索の余裕
+    const margin = 34; // 粒子半径の上限目安（大きく融合した猫の足を含む） + 探索の余裕
     const cell = this.cell;
     const cols = this.cols;
     const rows = this.rows;
@@ -723,6 +764,7 @@ export class World {
     for (let i = 0; i < this.n; i++) {
       const bi = owner[i];
       if (this.bodies[bi].kinematic) continue;
+      const ghost = this.bodies[bi].ghostWith;
       const c = this.cellOf(x[i], y[i]);
       const s0 = cs[c];
       const s1 = cs[c + 1];
@@ -733,6 +775,7 @@ export class World {
       for (let s = s0; s < s1; s++) {
         const e = items[s];
         if (this.eBody[e] === bi) continue;
+        if (ghost !== null && this.bodies[this.eBody[e]] === ghost) continue;
         const a = this.eA[e];
         const b = this.eB[e];
         const ex = x[b] - x[a];

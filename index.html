@@ -10,7 +10,7 @@
   <body>
     <canvas id="game" aria-label="金魚鉢に猫を落とすゲーム"></canvas>
     <div id="hud">
-      <div class="pill stage"><span class="label">STAGE</span><b id="stageNum">1</b></div>
+      <div class="pill stage"><span class="label" id="hudLabel">STAGE</span><b id="stageNum">1</b></div>
       <h1 class="title"><button id="titleBtn" type="button" aria-haspopup="dialog">ねこみつ</button></h1>
       <div class="right">
         <button id="autoBtn" class="toggle" type="button" aria-pressed="false" title="オートモード（自動で落として、クリアしたら次へ）">
@@ -29,12 +29,29 @@
         <button id="nextBtn">つぎのステージへ</button>
       </div>
     </div>
-    <dialog id="quitDialog" aria-labelledby="quitText">
-      <p id="quitText">終わりますか？</p>
-      <div class="actions">
-        <button id="quitNo" type="button" class="secondary" autofocus>いいえ</button>
-        <button id="quitYes" type="button" class="primary">はい</button>
+    <div id="over" hidden>
+      <div class="card">
+        <div class="sub">おしまい</div>
+        <div class="score">スコア <b id="overScore">0</b></div>
+        <div class="best" id="overBest"></div>
+        <button id="retryBtn" type="button">もういちど</button>
       </div>
+    </div>
+    <dialog id="menu" aria-labelledby="menuLead">
+      <p id="menuLead" class="lead">あそぶゲームをえらんでね</p>
+      <div class="modes">
+        <button class="mode" type="button" data-mode="mitsu">
+          <span class="name">ねこみつ</span>
+          <span class="desc">猫を落として、金魚鉢をいっぱいにする</span>
+        </button>
+        <button class="mode" type="button" data-mode="keshi">
+          <span class="name">ねこけし</span>
+          <span class="desc">同じ猫をくっつけて合体。大きくなると、ぽんっと消える</span>
+          <span class="best" id="menuBest"></span>
+        </button>
+      </div>
+      <p class="note" id="menuNote">えらぶと最初から始まります</p>
+      <button id="menuClose" type="button" class="secondary">つづける</button>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
