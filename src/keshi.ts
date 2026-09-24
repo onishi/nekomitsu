@@ -22,21 +22,22 @@ export const KESHI_COATS: Coat[] = ['cha', 'kiji', 'kuro', 'shiro', 'hachi', 'sa
 /** 落とした数 → 登場する毛色の数。[何匹目から, 種類数] */
 const COAT_STEPS: [number, number][] = [
   [0, 4],
-  [20, 5],
-  [45, 6],
-  [75, 7],
+  [16, 5],
+  [36, 6],
+  [60, 7],
 ];
 
-/** 7種類そろった後は、上限ラインを超えていられる時間が少しずつ短くなる（3秒 → 最短1.8秒） */
+/** 4匹ぶんで消えるようになった後は、上限ラインを超えていられる時間が少しずつ短くなる（3秒 → 最短1.8秒） */
+const OVER_SHRINK_FROM = 120;
 function overLimitFor(drops: number): number {
-  const extra = Math.max(0, drops - 100);
-  return Math.max(1.8, OVER_SECONDS - extra * 0.012);
+  const extra = Math.max(0, drops - OVER_SHRINK_FROM);
+  return Math.max(1.8, OVER_SECONDS - extra * 0.015);
 }
 
-/** この大きさ（何匹ぶん）に達したら、ぽんっと消える（150匹目からは4匹ぶん） */
+/** この大きさ（何匹ぶん）に達したら、ぽんっと消える（80匹目からは4匹ぶん） */
 export const POP_UNITS = 3;
 const HARD_POP_UNITS = 4;
-const HARD_POP_FROM = 150;
+const HARD_POP_FROM = 80;
 /** 上限ラインを超えたまま、この秒数たつとゲームオーバー */
 export const OVER_SECONDS = 3;
 
