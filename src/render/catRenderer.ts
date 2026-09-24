@@ -132,16 +132,23 @@ function bodyPath(ctx: CanvasRenderingContext2D, p: Pt[], fluff: number, c: Pt):
   else closedSpline(ctx, p);
 }
 
+let gx = new Float64Array(64);
+let gy = new Float64Array(64);
+
 export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number): void {
   const w = cat.world;
   const sp = cat.species;
   const coat = cat.coat;
-  const cl = cat.bodyCluster;
+  if (gx.length < cat.ring.length) {
+    gx = new Float64Array(64);
+    gy = new Float64Array(64);
+  }
+  cat.ringGoals(gx, gy);
   const N = cat.ring.length;
   const held = cat.held;
   // 吊るされている間はクラスタのゴールが古いので粒子位置そのまま
   const gb = held ? 0 : 0.3;
-  const ring = displayRing(cat, cat.ring, cl.goalX, cl.goalY, gb, cat.ringR * 0.95);
+  const ring = displayRing(cat, cat.ring, gx, gy, gb, cat.ringR * 0.95);
   const c = centroid(ring);
   const lineW = 1.6;
 

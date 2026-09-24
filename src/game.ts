@@ -5,7 +5,8 @@ import { COATS, SPECIES, withGirth, type Coat, type Species, type SpeciesKey } f
 import { Bowl } from './physics/bowl';
 import { World } from './physics/world';
 
-export const FILL_GOAL = 0.9;
+/** 充填率がこれを超えたらクリア（猫の量が金魚鉢の容量を超える = はみ出す） */
+export const FILL_GOAL = 1.0;
 
 interface StageDef {
   R: number;
@@ -54,6 +55,7 @@ export class Game {
   private judgeTimer = 0;
   clearTime = 0;
   clearFill = 0;
+  clearReason: 'fill' | 'overflow' = 'fill';
   squeeze = 0;
   dropsThisStage = 0;
   private lastCoats: string[] = [];
@@ -87,7 +89,7 @@ export class Game {
 
   /** 吊るす位置の高さ */
   get dropY(): number {
-    return this.bowl.openY - this.bowl.R * 0.55;
+    return this.bowl.openY - this.bowl.R * 0.72;
   }
 
   startStage(n: number): void {
@@ -241,9 +243,10 @@ export class Game {
       const settled = maxSpeed < 45 && this.judgeTimer > 1.0;
       if (settled || this.judgeTimer > 4) {
         if (this.fill >= FILL_GOAL || this.overflowing()) {
+          this.clearReason = this.fill >= FILL_GOAL ? 'fill' : 'overflow';
           this.phase = 'cleared';
           this.clearTime = this.time;
-          this.clearFill = Math.max(this.fill, FILL_GOAL);
+          this.clearFill = this.fill;
           this.env.cleared = true;
           this.sound.clear();
           if (this.onClear) this.onClear();
@@ -264,41 +267,52 @@ export class Game {
     }
   }
 
-  /** 口より上まで積み上がって落ち着いている */
+  /** 吊るしている猫の近くまで積み上がって落ち着いている（念のための救済） */
   private overflowing(): boolean {
     for (const c of this.cats) {
-      if (c.landed && c.calm > 1 && c.cy < this.bowl.openY - this.bowl.R * 0.12) return true;
+      if (c.landed && c.calm > 1 && c.body.minY < this.dropY + this.bowl.R * 0.3) return true;
     }
     return false;
   }
 
+  /**
+   * 充填率の計測点。金魚鉢の内側（口まで）= 容量、
+   * 口より上の「はみ出し」部分も猫がいれば数える。
+   */
   private buildFillCells(): void {
     const b = this.bowl;
     const step = Math.max(7, b.R / 30);
-    const top = this.fillTop;
     const pts: number[] = [];
-    for (let y = top + step / 2; y < b.bottomY; y += step) {
+    let cap = 0;
+    for (let y = this.dropY + step / 2; y < b.bottomY; y += step) {
       for (let x = -b.R + step / 2; x < b.R; x += step) {
-        if (b.insideFillRegion(x, y, top)) pts.push(x, y);
+        if (y >= b.openY) {
+          if (x * x + y * y < b.R * b.R) {
+            pts.push(x, y);
+            cap++;
+          }
+        } else if (Math.abs(x) < b.openHalfW) {
+          pts.push(x, y);
+        }
       }
     }
     this.fillCells = Float64Array.from(pts);
+    this.fillCapacity = cap;
   }
+  private fillCapacity = 1;
 
-  /** 満たすべき領域の上端（口の少し下） */
-  get fillTop(): number {
-    return this.bowl.openY + this.bowl.R * 0.05;
-  }
-
-  /** 金魚鉢内部が猫で埋まっている割合（細い隙間は埋まっているとみなす） */
+  /**
+   * 猫の量 ÷ 金魚鉢の容量。猫どうしの隙間は数えないので、
+   * 100% を超えるには口からはみ出すまで詰める必要がある。
+   */
   computeFill(): number {
     const w = this.world;
     const polys: { xs: Float64Array; ys: Float64Array; x0: number; y0: number; x1: number; y1: number }[] = [];
-    const dil = 7;
+    // 描画の輪郭（粒子半径ぶん外側）に合わせる
     for (const c of this.cats) {
       for (const [ring, pad] of [
-        [c.ring, c.ringR + dil],
-        [c.head, 4 + dil],
+        [c.ring, c.ringR],
+        [c.head, 3],
       ] as [number[], number][]) {
         const n = ring.length;
         let cx = 0;
@@ -331,38 +345,19 @@ export class Game {
       }
     }
     const cells = this.fillCells;
-    const total = cells.length / 2;
-    if (total === 0) return 0;
-    const R = this.bowl.R;
-    const edge = R - 9; // ガラス際の細い隙間は埋まっている扱い
     let filled = 0;
     for (let k = 0; k < cells.length; k += 2) {
       const x = cells[k];
       const y = cells[k + 1];
-      let hit = false;
       for (const p of polys) {
         if (x < p.x0 || x > p.x1 || y < p.y0 || y > p.y1) continue;
         if (inPoly(p.xs, p.ys, x, y)) {
-          hit = true;
+          filled++;
           break;
         }
       }
-      if (!hit && x * x + y * y > edge * edge) {
-        // ガラス際: すぐ内側が猫なら埋まっている
-        const s = (edge - 6) / Math.hypot(x, y);
-        const ix = x * s;
-        const iy = y * s;
-        for (const p of polys) {
-          if (ix < p.x0 || ix > p.x1 || iy < p.y0 || iy > p.y1) continue;
-          if (inPoly(p.xs, p.ys, ix, iy)) {
-            hit = true;
-            break;
-          }
-        }
-      }
-      if (hit) filled++;
     }
-    return filled / total;
+    return filled / this.fillCapacity;
   }
 }
 

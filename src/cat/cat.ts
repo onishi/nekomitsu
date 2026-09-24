@@ -64,6 +64,11 @@ export class Cat {
   readonly feet: number[] = [];
   readonly tail: number[] = [];
   readonly bodyCluster: ShapeCluster;
+  /** 前半身・後半身（腰の関節） */
+  readonly frontCluster!: ShapeCluster;
+  readonly rearCluster!: ShapeCluster;
+  private frontSlot: number[] = [];
+  private rearSlot: number[] = [];
   readonly headCluster: ShapeCluster;
   readonly bodyArea: AreaConstraint;
   /** ローカル rest 座標（向き反映済み） */
@@ -221,7 +226,10 @@ export class Cat {
 
     // --- 制約 ---
     for (let k = 0; k < N; k++) {
-      body.addDistance(this.ring[k], this.ring[(k + 1) % N], sp.edgeCompliance, world);
+      // 腰（胴体の中央付近）の背中側・お腹側は伸び縮みしやすく = 曲がりやすい
+      const mx = (ringPts[k].x + ringPts[(k + 1) % N].x) / 2;
+      const waist = Math.max(0, 1 - Math.abs(mx) / (a * 0.45));
+      body.addDistance(this.ring[k], this.ring[(k + 1) % N], sp.edgeCompliance * (1 + 25 * waist), world);
     }
     // 首: 頭中心と近い胴体粒子3つ
     const byDist = this.ring
@@ -249,10 +257,11 @@ export class Cat {
       const idx: number[] = [];
       const wt: number[] = [];
       const st: number[] = [];
+      // 全身クラスタは弱め（全体の猫らしさだけ保つ）。形の大部分は前半身・後半身が受け持つ
       for (const i of this.ring) {
         idx.push(i);
         wt.push(1);
-        st.push(sp.shapeStiff);
+        st.push(sp.shapeStiff * 0.1);
       }
       idx.push(this.headC);
       wt.push(2);
@@ -281,6 +290,43 @@ export class Cat {
       this.bodyCluster.stretchMin = 1 / sp.stretchMax;
       body.clusters.push(this.bodyCluster);
     }
+    // --- 腰の関節: 胴体を前半身・後半身の2クラスタに分け、腰で曲がれるようにする ---
+    {
+      const half = (front: boolean): ShapeCluster => {
+        const idx: number[] = [];
+        const st: number[] = [];
+        for (const i of this.ring) {
+          const lx = loc(i).x * facing;
+          // 腰（中央付近）は両方に属して、つなぎ目になる
+          if (front ? lx > -a * 0.1 : lx < a * 0.1) {
+            idx.push(i);
+            st.push(sp.shapeStiff);
+          }
+        }
+        if (front) {
+          idx.push(this.headC);
+          st.push(0.3);
+        }
+        const c = new ShapeCluster(
+          idx,
+          idx.map((i) => loc(i).x),
+          idx.map((i) => loc(i).y),
+          idx.map((i) => (i === this.headC ? 1.5 : 1)),
+          st,
+          sp.beta,
+        );
+        c.stretchMax = sp.stretchMax;
+        c.stretchMin = 1 / sp.stretchMax;
+        return c;
+      };
+      this.frontCluster = half(true);
+      this.rearCluster = half(false);
+      body.clusters.push(this.frontCluster, this.rearCluster);
+      // 表示用: 輪郭粒子ごとに、属する半身クラスタのスロット
+      const slotOf = (c: ShapeCluster, i: number) => c.idx.indexOf(i);
+      this.frontSlot = this.ring.map((i) => slotOf(this.frontCluster, i));
+      this.rearSlot = this.ring.map((i) => slotOf(this.rearCluster, i));
+    }
     {
       const idx = [...this.head, this.headC];
       this.headCluster = new ShapeCluster(
@@ -306,9 +352,14 @@ export class Cat {
   private installHooks(): void {
     // 胴体: 落ち着くと、ほんの少し自分で起き上がろうとする
     this.bodyCluster.angleHook = (ang) => ang - wrapAngle(ang) * this.uprightBody;
+    // 腰: 後半身は前半身に対して ±75° まで曲がる
+    this.rearCluster.angleHook = (ang) => {
+      const fa = this.frontCluster.angle;
+      return fa + clamp(wrapAngle(ang - fa), -1.3, 1.3);
+    };
     // 頭: 首の可動域を制限しつつ、顔を上に向けようとする
     this.headCluster.angleHook = (ang) => {
-      const ba = this.bodyCluster.angle;
+      const ba = this.frontCluster.angle;
       let rel = clamp(wrapAngle(ang - ba), -0.8, 0.8);
       let out = ba + rel;
       const up = wrapAngle(out);
@@ -434,8 +485,8 @@ export class Cat {
     this.prevVX = vx;
     this.prevVY = vy;
     this.munyuCooldown -= dt;
-    const squash = this.bodyCluster.squash;
-    if (this.landed && this.age > 0.2 && (dv > 140 || (squash > 1.45 && ringHits > 2))) {
+    const squash = Math.max(this.frontCluster.squash, this.rearCluster.squash);
+    if (this.landed && this.age > 0.2 && dv > 150) {
       this.pressTimer = Math.max(this.pressTimer, 0.9);
       if (this.munyuCooldown <= 0 && ringHits > 0) {
         env.sound.munyu(clamp(dv / 500, 0.2, 0.8));
@@ -454,7 +505,7 @@ export class Cat {
         if (this.slide === 0) this.slideArmed = this.impactTimer < -0.6 && this.pressTimer <= 0;
         this.slide += vy * dt;
       } else if (vy < 12) {
-        if (this.slideArmed && this.slide > this.species.b * 0.45 && ringHits > 0) {
+        if (this.slideArmed && this.slide > this.species.b * 0.65 && ringHits > 0) {
           env.sound.supo();
           env.event('supo', this, 1);
           this.calm = Math.max(this.calm, 1);
@@ -498,6 +549,8 @@ export class Cat {
     // 着地直後は内部振動を強めに減衰（跳ね返りすぎない）
     this.body.internalDamping = this.species.damping * (this.impactTimer > 0 ? 2.2 : 1);
     this.bodyCluster.stiffMul = this.firmness;
+    this.frontCluster.stiffMul = this.firmness;
+    this.rearCluster.stiffMul = this.firmness;
 
     // 起き上がり補助・首
     this.uprightBody = this.landed ? 0.0025 * smooth(0.5, 3, this.calm) : 0;
@@ -554,7 +607,7 @@ export class Cat {
     if (env.cleared) e = 'happy';
     else if (!this.landed) e = 'surprised';
     else if (this.impactTimer > 0) e = 'startled';
-    else if (this.pressTimer > 0 || squash > 1.6) e = 'squint';
+    else if (this.pressTimer > 0 || squash > 1.9) e = 'squint';
     else if (this.headBuried > 0.6 && this.calm > 1.5) e = 'bliss';
     else if (this.calm > 8) e = 'sleep';
     else if (this.calm > 4) e = 'sleepy';
@@ -589,6 +642,26 @@ export class Cat {
       this.blinkTimer = 2.5 + Math.random() * 4;
     }
     this.blink = Math.max(0, this.blink - dt * 7);
+  }
+
+  /** 描画用: 輪郭粒子のゴール位置（前後の半身クラスタのゴールの平均） */
+  ringGoals(outX: Float64Array, outY: Float64Array): void {
+    const f = this.frontCluster;
+    const r = this.rearCluster;
+    for (let k = 0; k < this.ring.length; k++) {
+      const a = this.frontSlot[k];
+      const b = this.rearSlot[k];
+      if (a >= 0 && b >= 0) {
+        outX[k] = (f.goalX[a] + r.goalX[b]) / 2;
+        outY[k] = (f.goalY[a] + r.goalY[b]) / 2;
+      } else if (a >= 0) {
+        outX[k] = f.goalX[a];
+        outY[k] = f.goalY[a];
+      } else {
+        outX[k] = r.goalX[b];
+        outY[k] = r.goalY[b];
+      }
+    }
   }
 
   /** 描画用: 頭中心と角度 */

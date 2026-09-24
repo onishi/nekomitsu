@@ -67,10 +67,4 @@ export class Bowl {
     out.x = x;
     out.y = y;
   }
-
-  /** 点が「満たすべき内部領域」（口の少し下まで）に入っているか */
-  insideFillRegion(x: number, y: number, fillTopY: number): boolean {
-    if (y < fillTopY || y > this.bottomY) return false;
-    return x * x + y * y < this.R * this.R;
-  }
 }

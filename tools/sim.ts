@@ -34,5 +34,5 @@ for (let f = 0; f < frames; f++) {
   }
   if (game.phase === 'cleared' && game.time - game.clearTime > 3) break;
 }
-console.log('events', JSON.stringify(events));
+console.log('events', JSON.stringify(events), 'clear:', game.phase === 'cleared' ? `${game.clearReason} ${(game.clearFill * 100).toFixed(1)}%` : '-');
 console.log(`avg update ${(stepMs / frames).toFixed(2)}ms, worst ${worst.toFixed(1)}ms, particles=${game.world.n}`);
