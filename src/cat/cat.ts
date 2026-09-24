@@ -648,8 +648,8 @@ export class Cat {
     // --- 表情 ---
     this.headBuried += ((headHits >= 3 ? 1 : 0) - this.headBuried) * Math.min(1, dt * 2);
     let e: Expression;
-    if (env.cleared) e = 'happy';
-    else if (!this.landed) e = 'surprised';
+    if (!this.landed) e = 'surprised';
+    else if (env.cleared) e = 'happy';
     else if (this.impactTimer > 0) e = 'startled';
     else if (this.pressTimer > 0 || squash > 1.9) e = 'squint';
     else if (this.action === 'yawn') e = 'yawn';

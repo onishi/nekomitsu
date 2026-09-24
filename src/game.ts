@@ -51,8 +51,6 @@ export class Game {
   private spawnTimer = 0;
   /** 吊るされた猫の登場アニメ 0..1 */
   private heldIntro = 1;
-  /** 判定中は吊るされた猫を上へ引っ込める 0..1 */
-  private heldHide = 0;
   fill = 0;
   private fillTimer = 0;
   phase: Phase = 'playing';
@@ -102,6 +100,8 @@ export class Game {
       this.shape = stageShape(n);
       if (forcedShape) this.shape = { spec: { kind: forcedShape, variant: 0.5 }, area: this.shape.area };
     }
+    // 表示していた猫は消さずに次へ持ち越す（必ず落とせる）
+    const carry = this.held ? { species: this.held.species, coat: this.held.coat, facing: this.held.facing } : null;
     this.stage = n;
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world.clear();
@@ -115,9 +115,8 @@ export class Game {
     this.judgeTimer = 0;
     this.dropsThisStage = 0;
     this.env.cleared = false;
-    this.heldHide = 0;
     this.buildFillCells();
-    this.spawnHeld();
+    this.spawnHeld(carry);
     this.heldIntro = 1;
   }
 
@@ -156,10 +155,10 @@ export class Game {
     return COATS[0];
   }
 
-  private spawnHeld(): void {
-    const sp = withGirth(this.pickSpecies());
-    const coat = this.pickCoat();
-    const facing: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+  private spawnHeld(carry: { species: Species; coat: Coat; facing: 1 | -1 } | null = null): void {
+    const sp = carry ? carry.species : withGirth(this.pickSpecies());
+    const coat = carry ? carry.coat : this.pickCoat();
+    const facing: 1 | -1 = carry ? carry.facing : Math.random() < 0.5 ? 1 : -1;
     this.dropX = this.clampX(this.targetX, sp);
     const c = new Cat(this.world, sp, coat, facing, this.dropX, this.dropY);
     this.held = c;
@@ -174,7 +173,8 @@ export class Game {
   }
 
   get canDrop(): boolean {
-    return this.phase === 'playing' && this.held !== null && this.heldIntro > 0.6 && this.heldHide < 0.3;
+    // 表示している猫は判定中でもクリア後でも落とせる
+    return this.held !== null && this.heldIntro > 0.6;
   }
 
   /** snap: 指を離した位置へ合わせてから落とす（タップ操作用） */
@@ -201,7 +201,8 @@ export class Game {
     this.env.time = this.time;
 
     // 吊るされた猫
-    if (!this.held && this.phase === 'playing') {
+    // クリアしたら次の猫は出さない（表示中の猫は落とせる）
+    if (!this.held && this.phase !== 'cleared') {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) this.spawnHeld();
     }
@@ -213,9 +214,7 @@ export class Game {
       this.dropVX = (this.dropX - prev) / dt;
       this.heldIntro = Math.min(1, this.heldIntro + dt * 3.2);
       const e = 1 - Math.pow(1 - this.heldIntro, 3);
-      const hideTarget = this.phase !== 'playing' ? 1 : 0;
-      this.heldHide += (hideTarget - this.heldHide) * Math.min(1, dt * 5);
-      const y = this.dropY - (1 - e) * 200 - this.heldHide * 420;
+      const y = this.dropY - (1 - e) * 200;
       // 移動に合わせてぶらーんと傾く
       const sway = Math.sin(this.time * 2.1) * 0.05;
       const ang = Math.max(-0.4, Math.min(0.4, -this.dropVX * 0.0007)) + sway;

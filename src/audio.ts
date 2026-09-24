@@ -1,3 +1,5 @@
+import { synthMeow } from './meow';
+
 /**
  * 効果音（WebAudio で合成。音声ファイル不要）。
  * AudioContext はユーザー操作後に生成する。音が出なくてもゲームは成立する。
@@ -209,55 +211,13 @@ export class Sound {
     setTimeout(() => this.purr(0.9), 500);
   }
 
-  /**
-   * ニャー。のこぎり波の声帯音を、母音「イ」→「ア」→「ウ」っぽく動く
-   * 2つのフォルマント（帯域通過フィルタ）に通して猫の声にする。
-   * pitch: 1 が標準、大きいほど高い声
-   */
+  /** ニャー（pitch: 1 が標準、大きいほど高い声） */
   meow(pitch = 1): void {
     const ctx = this.ready();
     if (!ctx) return;
-    const t = ctx.currentTime;
-    const dur = 0.5 + Math.random() * 0.15;
-    const f0 = 560 * pitch;
-    const src = ctx.createOscillator();
-    src.type = 'sawtooth';
-    src.frequency.setValueAtTime(f0 * 0.85, t);
-    src.frequency.exponentialRampToValueAtTime(f0 * 1.18, t + dur * 0.28);
-    src.frequency.exponentialRampToValueAtTime(f0 * 0.78, t + dur);
-    // 声の揺れ
-    const vib = ctx.createOscillator();
-    vib.frequency.value = 6.5;
-    const vibG = ctx.createGain();
-    vibG.gain.value = f0 * 0.018;
-    vib.connect(vibG).connect(src.frequency);
-
-    const out = ctx.createGain();
-    out.gain.setValueAtTime(0.0001, t);
-    out.gain.exponentialRampToValueAtTime(0.5, t + 0.05);
-    out.gain.setValueAtTime(0.5, t + dur * 0.6);
-    out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    // フォルマント: ニ(i) → ャ(a) → ー(u 寄り)
-    const formant = (freqs: [number, number, number], q: number, gain: number) => {
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.Q.value = q;
-      bp.frequency.setValueAtTime(freqs[0] * pitch, t);
-      bp.frequency.linearRampToValueAtTime(freqs[1] * pitch, t + dur * 0.3);
-      bp.frequency.linearRampToValueAtTime(freqs[2] * pitch, t + dur);
-      const g = ctx.createGain();
-      g.gain.value = gain;
-      src.connect(bp).connect(g).connect(out);
-    };
-    formant([450, 950, 700], 6, 1.2);
-    formant([2300, 1500, 1100], 9, 0.7);
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 3500;
-    out.connect(lp).connect(this.master!);
-    src.start(t);
-    vib.start(t);
-    src.stop(t + dur + 0.02);
-    vib.stop(t + dur + 0.02);
+    const g = ctx.createGain();
+    g.gain.value = 0.55;
+    g.connect(this.master!);
+    synthMeow(ctx, g, ctx.currentTime + 0.01, pitch);
   }
 }

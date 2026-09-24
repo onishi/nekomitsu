@@ -70,7 +70,6 @@ canvas.addEventListener('pointerup', (e) => {
   if (!pointerDown) return;
   pointerDown = false;
   game.targetX = toWorldX(e.clientX);
-  if (game.phase === 'cleared') return;
   // タッチは指を離した位置に落とす。マウスは既に追従しているのでそのまま
   game.drop(e.pointerType !== 'mouse');
 });
@@ -86,8 +85,9 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     game.sound.unlock();
     if (e.repeat) return;
-    if (game.phase === 'cleared') goNext();
-    else game.drop();
+    // 吊るしている猫がいれば落とす。クリア後で猫がいなければ次のステージへ
+    if (game.held) game.drop();
+    else if (game.phase === 'cleared') goNext();
   } else if (e.key === 'r' || e.key === 'R') {
     game.restart();
   }
@@ -224,7 +224,7 @@ function render(): void {
   drawBowlFront(ctx, b);
   fx.draw(ctx);
   const h = game.held;
-  if (h && game.phase === 'playing') {
+  if (h) {
     // 落下地点のガイド
     ctx.save();
     ctx.setLineDash([4, 8]);
