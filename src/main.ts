@@ -180,13 +180,56 @@ soundBtn.addEventListener('click', () => {
   soundBtn.blur();
 });
 function goNext(): void {
-  if (game.phase !== 'cleared' || performance.now() - clearShownAt < 900) return;
+  if (game.phase !== 'cleared' || !clearShown || performance.now() - clearShownAt < 900) return;
   game.nextStage();
   fx.clear();
   clearEl.hidden = true;
+  clearShown = false;
   layout();
 }
 nextBtn.addEventListener('click', goNext);
+
+// --- オートモード（鑑賞用）: 適当な位置へ動かして落とし、クリアしたら次の面へ ---
+const autoBtn = $<HTMLButtonElement>('autoBtn');
+let auto = false;
+let autoTimer = 0;
+let autoAim: number | null = null;
+function setAuto(on: boolean): void {
+  auto = on;
+  autoAim = null;
+  autoTimer = 0.4;
+  autoBtn.setAttribute('aria-pressed', String(on));
+  autoBtn.setAttribute('aria-label', on ? 'オートモードを止める' : 'オートモードにする');
+  if (on) hint.classList.add('fade');
+}
+setAuto(false);
+autoBtn.addEventListener('click', () => {
+  game.sound.unlock();
+  setAuto(!auto);
+  autoBtn.blur();
+});
+function updateAuto(dt: number): void {
+  if (!auto) return;
+  autoTimer -= dt;
+  if (game.phase === 'cleared') {
+    // クリアの余韻を少し見せてから次の面へ
+    if (clearShown && performance.now() - clearShownAt > 3200) goNext();
+    return;
+  }
+  // 判定中は落とさずに待つ
+  if (game.phase !== 'playing' || !game.held || autoTimer > 0) return;
+  if (autoAim === null) {
+    // 狙う位置を決めて、そこまで猫を動かす
+    const w = game.bowl.openHalfW;
+    autoAim = (Math.random() * 2 - 1) * w;
+    game.targetX = autoAim;
+    autoTimer = 0.45 + Math.random() * 0.35;
+  } else if (game.canDrop) {
+    game.drop();
+    autoAim = null;
+    autoTimer = 0.5 + Math.random() * 0.9;
+  }
+}
 
 // --- タイトルを押すと「終わりますか？」: はい → ステージ1から、いいえ → 続行 ---
 const quitDialog = $<HTMLDialogElement>('quitDialog');
@@ -202,6 +245,7 @@ $('quitNo').addEventListener('click', () => quitDialog.close('no'));
 // Esc でも閉じる（= いいえ）
 quitDialog.addEventListener('close', () => {
   if (quitDialog.returnValue === 'yes') {
+    setAuto(false);
     game.reset();
     fx.clear();
     clearEl.hidden = true;
@@ -213,9 +257,11 @@ quitDialog.addEventListener('close', () => {
   last = performance.now();
 });
 let clearShownAt = 0;
+let clearShown = false;
 game.onClear = () => {
   setTimeout(() => {
     clearEl.hidden = false;
+    clearShown = true;
     clearShownAt = performance.now();
   }, 450);
 };
@@ -262,6 +308,7 @@ function frame(now: number): void {
     if (keys.has('ArrowRight')) game.targetX = Math.max(game.targetX, game.dropX) + 520 * DT;
     game.update(DT);
     updateEffects(DT);
+    updateAuto(DT);
     acc -= DT;
     steps++;
   }

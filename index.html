@@ -12,9 +12,16 @@
     <div id="hud">
       <div class="pill stage"><span class="label">STAGE</span><b id="stageNum">1</b></div>
       <h1 class="title"><button id="titleBtn" type="button" aria-haspopup="dialog">ねこみつ</button></h1>
+      <div class="right">
+        <button id="autoBtn" class="toggle" type="button" aria-pressed="false" title="オートモード（自動で落として、クリアしたら次へ）">
+          <svg class="play" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.5v13l10-6.5z" fill="currentColor"/></svg>
+          <svg class="stop" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6.5" y="6.5" width="11" height="11" rx="2" fill="currentColor"/></svg>
+          <span class="text">オート</span>
+        </button>
       <button id="soundBtn" class="icon" aria-label="サウンドOFF" title="サウンド ON/OFF">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
+      </div>
     </div>
     <div id="hint">左右に動かして、タップで落とす</div>
     <div id="clear" hidden>

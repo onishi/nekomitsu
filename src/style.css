@@ -175,8 +175,59 @@ body {
   }
 }
 
-#soundBtn {
+#hud .right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   pointer-events: auto;
+}
+
+/* オートモードのトグル */
+button.toggle {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(90, 60, 30, 0.08);
+  transition:
+    transform 0.12s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+button.toggle:active {
+  transform: scale(0.94);
+}
+
+button.toggle .stop,
+button.toggle[aria-pressed='true'] .play {
+  display: none;
+}
+
+button.toggle[aria-pressed='true'] .stop {
+  display: inline;
+}
+
+button.toggle[aria-pressed='true'] {
+  background: linear-gradient(180deg, #f2a36e, #e5854f);
+  border-color: transparent;
+  color: #fff;
+}
+
+@media (max-width: 400px) {
+  button.toggle {
+    padding: 0 11px;
+  }
+  button.toggle .text {
+    display: none;
+  }
 }
 
 button {
