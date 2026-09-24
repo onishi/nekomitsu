@@ -111,7 +111,8 @@ canvas.addEventListener('pointerdown', (e) => {
   mode = 'pending';
   const wx = toWorldX(e.clientX);
   const wy = toWorldY(e.clientY);
-  downInside = game.isInside(wx, wy);
+  // ねこけしではかき混ぜない（容器の中でもドラッグは狙う操作、タップは落とす）
+  downInside = game.mode !== 'keshi' && game.isInside(wx, wy);
   if (downInside) {
     longTimer = window.setTimeout(startStir, LONG_PRESS_MS);
     Object.assign(press, { active: true, x: wx, y: wy, t0: performance.now() });
