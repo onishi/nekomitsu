@@ -165,9 +165,14 @@ export class Game {
     return this.phase === 'playing' && this.held !== null && this.heldIntro > 0.6 && this.heldHide < 0.3;
   }
 
-  drop(): void {
+  /** snap: 指を離した位置へ合わせてから落とす（タップ操作用） */
+  drop(snap = false): void {
     if (!this.canDrop || !this.held) return;
     const c = this.held;
+    if (snap) {
+      this.dropX = this.clampX(this.targetX, c.species);
+      c.placeHeld(this.dropX, c.cy, c.heldAngle);
+    }
     c.release(this.dropVX * 0.3, 60);
     this.cats.push(c);
     this.held = null;

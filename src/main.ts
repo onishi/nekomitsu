@@ -17,7 +17,7 @@ const soundBtn = $<HTMLButtonElement>('soundBtn');
 const restartBtn = $<HTMLButtonElement>('restartBtn');
 const nextBtn = $<HTMLButtonElement>('nextBtn');
 const coarse = window.matchMedia('(pointer: coarse)').matches;
-hint.textContent = coarse ? '左右に動かして、はなすと落ちる' : '左右に動かして、クリックで落とす';
+hint.textContent = coarse ? '左右に動かして、タップで落とす' : '左右に動かして、クリックで落とす（← → / Space）';
 
 const game = new Game();
 const view: View = { scale: 1, ox: 0, oy: 0, dpr: 1, w: 1, h: 1 };
@@ -69,7 +69,8 @@ canvas.addEventListener('pointerup', (e) => {
   pointerDown = false;
   game.targetX = toWorldX(e.clientX);
   if (game.phase === 'cleared') return;
-  game.drop();
+  // タッチは指を離した位置に落とす。マウスは既に追従しているのでそのまま
+  game.drop(e.pointerType !== 'mouse');
 });
 canvas.addEventListener('pointercancel', () => {
   pointerDown = false;
