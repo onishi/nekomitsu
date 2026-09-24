@@ -29,6 +29,8 @@ export class Container {
   readonly bottomY: number;
   /** 平らな底の半幅（丸底・尖った底なら小さい） */
   readonly bottomHalfW: number;
+  /** 平らな底の中心 x（管の形では左右どちらかに寄る） */
+  readonly bottomCX: number;
   /** いちばん広いところの半幅 */
   readonly halfW: number;
   /** 容量（口まで） */
@@ -65,9 +67,16 @@ export class Container {
     }
     this.bottomY = by;
     this.halfW = hw;
-    let bw = 0;
-    for (const p of wall) if (by - p.y < 1.5) bw = Math.max(bw, Math.abs(p.x));
-    this.bottomHalfW = bw;
+    let bl = Infinity;
+    let br = -Infinity;
+    for (const p of wall) {
+      if (by - p.y < 1.5) {
+        bl = Math.min(bl, p.x);
+        br = Math.max(br, p.x);
+      }
+    }
+    this.bottomHalfW = (br - bl) / 2;
+    this.bottomCX = (br + bl) / 2;
     let A = 0;
     for (let k = 0; k < wall.length; k++) {
       const p = wall[k];
@@ -124,7 +133,27 @@ export class Container {
         this.safe[j * this.gCols + i] = this.insideExt(x, y) ? this.wallDist(x, y) - c * 0.71 : -1;
       }
     }
+    // 各セルの近くにある壁の辺（管のように壁が長い形でも、近くの辺だけ調べれば済む）
+    const reach = 26; // 粒子半径の上限 + 余裕
+    const lists: number[][] = Array.from({ length: this.gCols * this.gRows }, () => []);
+    for (let k = 0; k < this.segAx.length; k++) {
+      const x0 = Math.min(this.segAx[k], this.segBx[k]) - reach;
+      const x1 = Math.max(this.segAx[k], this.segBx[k]) + reach;
+      const y0 = Math.min(this.segAy[k], this.segBy[k]) - reach;
+      const y1 = Math.max(this.segAy[k], this.segBy[k]) + reach;
+      const i0 = Math.max(0, Math.floor((x0 - this.gx0) / c));
+      const i1 = Math.min(this.gCols - 1, Math.floor((x1 - this.gx0) / c));
+      const j0 = Math.max(0, Math.floor((y0 - this.gy0) / c));
+      const j1 = Math.min(this.gRows - 1, Math.floor((y1 - this.gy0) / c));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) lists[j * this.gCols + i].push(k);
+    }
+    this.cellSegStart = new Int32Array(lists.length + 1);
+    for (let q = 0; q < lists.length; q++) this.cellSegStart[q + 1] = this.cellSegStart[q] + lists[q].length;
+    this.cellSegs = new Int32Array(this.cellSegStart[lists.length]);
+    for (let q = 0; q < lists.length; q++) this.cellSegs.set(lists[q], this.cellSegStart[q]);
   }
+  private cellSegStart: Int32Array = new Int32Array(1);
+  private cellSegs: Int32Array = new Int32Array(0);
 
   private insideExt(px: number, py: number): boolean {
     const xs = this.polyX;
@@ -166,14 +195,27 @@ export class Container {
     out.y = y;
     const gi = Math.floor((x - this.gx0) / this.gCell);
     const gj = Math.floor((y - this.gy0) / this.gCell);
-    if (gi >= 0 && gj >= 0 && gi < this.gCols && gj < this.gRows && this.safe[gj * this.gCols + gi] > r) return;
+    let s0 = 0;
+    let s1 = 0;
+    let useList = false;
+    if (gi >= 0 && gj >= 0 && gi < this.gCols && gj < this.gRows) {
+      const cell = gj * this.gCols + gi;
+      if (this.safe[cell] > r) return;
+      s0 = this.cellSegStart[cell];
+      s1 = this.cellSegStart[cell + 1];
+      // 近くに壁がなく、内側 = 何もしない。外側（めり込み過ぎ）なら全部の辺から探す
+      if (s0 === s1 && this.safe[cell] >= 0) return;
+      useList = s0 < s1;
+    }
 
-    const inside = this.insideExt(x, y);
     let best = Infinity;
     let bk = 0;
+    let bt = 0;
     let qx = 0;
     let qy = 0;
-    for (let k = 0; k < this.segAx.length; k++) {
+    const n = useList ? s1 - s0 : this.segAx.length;
+    for (let q = 0; q < n; q++) {
+      const k = useList ? this.cellSegs[s0 + q] : q;
       const ax = this.segAx[k];
       const ay = this.segAy[k];
       const ex = this.segBx[k] - ax;
@@ -187,11 +229,17 @@ export class Container {
       if (d < best) {
         best = d;
         bk = k;
+        bt = t;
         qx = cx;
         qy = cy;
       }
     }
     const d = Math.sqrt(best);
+    // 内外判定: 最近点が辺の途中なら辺の向きで分かる。角のときだけ厳密に
+    const inside =
+      bt > 0.001 && bt < 0.999
+        ? (x - qx) * this.segNx[bk] + (y - qy) * this.segNy[bk] > 0
+        : this.insideExt(x, y);
     if (inside && d >= r) return;
     let nx: number;
     let ny: number;

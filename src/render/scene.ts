@@ -49,13 +49,14 @@ export function drawBackground(ctx: CanvasRenderingContext2D, v: View, bowl: Con
   // 容器の影
   ctx.setTransform(v.scale * v.dpr, 0, 0, v.scale * v.dpr, v.ox * v.dpr, v.oy * v.dpr);
   const sy = tableWorldY(bowl);
-  const sw = Math.max(bowl.bottomHalfW, bowl.halfW * 0.6) * 1.15;
-  const sg = ctx.createRadialGradient(0, sy, 0, 0, sy, sw);
+  const sw = Math.max(bowl.bottomHalfW * 1.6, Math.min(bowl.halfW * 0.6, bowl.R * 0.9));
+  const scx = bowl.bottomCX;
+  const sg = ctx.createRadialGradient(scx, sy, 0, scx, sy, sw);
   sg.addColorStop(0, 'rgba(70,40,20,0.28)');
   sg.addColorStop(1, 'rgba(70,40,20,0)');
   ctx.fillStyle = sg;
   ctx.beginPath();
-  ctx.ellipse(0, sy, sw, bowl.R * 0.1, 0, 0, TAU);
+  ctx.ellipse(scx, sy, sw, bowl.R * 0.1, 0, 0, TAU);
   ctx.fill();
 }
 
@@ -140,7 +141,7 @@ export function drawBowlBack(ctx: CanvasRenderingContext2D, bowl: Container): vo
   // 底のガラス（奥側）
   if (!needsStand(bowl)) {
     ctx.beginPath();
-    ctx.ellipse(0, bowl.bottomY, bowl.bottomHalfW, Math.max(4, bowl.bottomHalfW * 0.1), 0, Math.PI, TAU);
+    ctx.ellipse(bowl.bottomCX, bowl.bottomY, bowl.bottomHalfW, Math.max(4, bowl.bottomHalfW * 0.1), 0, Math.PI, TAU);
     ctx.strokeStyle = 'rgba(150,200,215,0.35)';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -201,24 +202,25 @@ export function drawBowlFront(ctx: CanvasRenderingContext2D, bowl: Container): v
     const sy = yb + R * 0.02;
     const sw = R * 0.32;
     ctx.beginPath();
-    ctx.ellipse(0, sy + R * 0.03, sw, R * 0.07, 0, 0, TAU);
+    ctx.ellipse(bowl.bottomCX, sy + R * 0.03, sw, R * 0.07, 0, 0, TAU);
     ctx.fillStyle = '#b98a58';
     ctx.fill();
     ctx.strokeStyle = 'rgba(90,55,30,0.5)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.beginPath();
-    ctx.ellipse(0, sy, sw * 0.62, R * 0.035, 0, 0, TAU);
+    ctx.ellipse(bowl.bottomCX, sy, sw * 0.62, R * 0.035, 0, 0, TAU);
     ctx.fillStyle = 'rgba(90,55,30,0.35)';
     ctx.fill();
   } else {
     // 底（厚いガラス）
     const xb = bowl.bottomHalfW;
+    const bx = bowl.bottomCX;
     ctx.beginPath();
-    ctx.moveTo(-xb, yb);
-    ctx.lineTo(xb, yb);
-    ctx.lineTo(xb * 0.98, yb + gt * 1.6);
-    ctx.lineTo(-xb * 0.98, yb + gt * 1.6);
+    ctx.moveTo(bx - xb, yb);
+    ctx.lineTo(bx + xb, yb);
+    ctx.lineTo(bx + xb * 0.98, yb + gt * 1.6);
+    ctx.lineTo(bx - xb * 0.98, yb + gt * 1.6);
     ctx.closePath();
     ctx.fillStyle = 'rgba(185,225,235,0.55)';
     ctx.fill();

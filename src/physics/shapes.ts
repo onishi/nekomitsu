@@ -13,7 +13,10 @@ export type ShapeKind =
   | 'hexagon'
   | 'diamond'
   | 'hourglass'
-  | 'vase';
+  | 'vase'
+  | 'sCurve'
+  | 'crank'
+  | 'spiral';
 
 export const SHAPE_NAMES: Record<ShapeKind, string> = {
   fishbowl: '金魚鉢',
@@ -25,7 +28,142 @@ export const SHAPE_NAMES: Record<ShapeKind, string> = {
   diamond: 'ひし形',
   hourglass: '砂時計',
   vase: '花瓶',
+  sCurve: 'S字',
+  crank: 'クランク',
+  spiral: '螺旋',
 };
+
+/** 曲がりくねった管の形（現実にはない容器）。中心線に沿って一定の太さの管を作る */
+const TUBES: Partial<Record<ShapeKind, { center: () => Pt[]; w: number }>> = {
+  sCurve: {
+    w: 0.5,
+    center: () =>
+      smoothProfile(
+        [
+          { x: 0, y: -1.3 },
+          { x: 0, y: -1.05 },
+          { x: 0.35, y: -0.78 },
+          { x: 0.75, y: -0.45 },
+          { x: 0.7, y: -0.12 },
+          { x: 0.05, y: 0.12 },
+          { x: -0.65, y: 0.4 },
+          { x: -0.75, y: 0.75 },
+          { x: -0.6, y: 1.0 },
+          { x: -0.6, y: 1.15 },
+        ],
+        10,
+      ),
+  },
+  crank: {
+    w: 0.5,
+    center: () =>
+      densify(
+        roundCorners(
+          [
+            { x: 0, y: -1.3 },
+            { x: 0, y: -0.6 },
+            { x: 0.9, y: -0.25 },
+            { x: 0.9, y: 0.3 },
+            { x: 0, y: 0.65 },
+            { x: 0, y: 1.15 },
+          ],
+          0.16,
+        ),
+        0.05,
+      ),
+  },
+  spiral: {
+    w: 0.44,
+    // 横から見たらせん: 左右に振れながら下っていく
+    center: () =>
+      smoothProfile(
+        [
+          { x: 0, y: -1.2 },
+          { x: 0, y: -1.02 },
+          { x: 0.42, y: -0.84 },
+          { x: 0.62, y: -0.6 },
+          { x: 0.3, y: -0.4 },
+          { x: -0.35, y: -0.2 },
+          { x: -0.6, y: 0.02 },
+          { x: -0.3, y: 0.24 },
+          { x: 0.35, y: 0.44 },
+          { x: 0.6, y: 0.66 },
+          { x: 0.35, y: 0.88 },
+          { x: 0.2, y: 1.05 },
+          { x: 0.2, y: 1.2 },
+        ],
+        10,
+      ),
+  },
+};
+
+/** 長い直線を細かく分ける（管の壁をなめらかにずらすため） */
+function densify(pts: Pt[], step: number): Pt[] {
+  const out: Pt[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+    for (let k = 1; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+  }
+  return out;
+}
+
+/** 中心線（上から下へ）から管の内壁を作る: 口の左端 → 左の壁 → 平らな底 → 右の壁 → 口の右端 */
+function tubeWall(center0: Pt[], w: number): Pt[] {
+  // 口と底が水平になるよう、両端にまっすぐ縦の区間を足す
+  const first = center0[0];
+  const last = center0[center0.length - 1];
+  const center = [
+    { x: first.x, y: first.y - 0.12 },
+    { x: first.x, y: first.y - 0.06 },
+    ...center0,
+    { x: last.x, y: last.y + 0.06 },
+    { x: last.x, y: last.y + 0.12 },
+  ];
+  const n = center.length;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  for (let k = 0; k < n; k++) {
+    const a = center[Math.max(0, k - 1)];
+    const b = center[Math.min(n - 1, k + 1)];
+    const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const tx = (b.x - a.x) / l;
+    const ty = (b.y - a.y) / l;
+    // 下向きに進むとき x が負の側が「左」
+    const nx = -ty;
+    const ny = tx;
+    left.push({ x: center[k].x + (nx * w) / 2, y: center[k].y + (ny * w) / 2 });
+    right.push({ x: center[k].x - (nx * w) / 2, y: center[k].y - (ny * w) / 2 });
+  }
+  return [...removeLoops(left), ...removeLoops(right).reverse()];
+}
+
+/** 急なカーブの内側で、ずらした壁が小さなループを作るので切り取る */
+function removeLoops(pts: Pt[]): Pt[] {
+  const out = pts.slice();
+  const cross = (a: Pt, b: Pt, c: Pt, d: Pt): Pt | null => {
+    const r = { x: b.x - a.x, y: b.y - a.y };
+    const q = { x: d.x - c.x, y: d.y - c.y };
+    const den = r.x * q.y - r.y * q.x;
+    if (Math.abs(den) < 1e-12) return null;
+    const t = ((c.x - a.x) * q.y - (c.y - a.y) * q.x) / den;
+    const u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / den;
+    return t > 0 && t < 1 && u > 0 && u < 1 ? { x: a.x + r.x * t, y: a.y + r.y * t } : null;
+  };
+  for (let i = 0; i < out.length - 3; i++) {
+    for (let j = Math.min(out.length - 2, i + 60); j >= i + 2; j--) {
+      const p = cross(out[i], out[i + 1], out[j], out[j + 1]);
+      if (p) {
+        out.splice(i + 1, j - i, p);
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+export const isTube = (kind: ShapeKind) => kind in TUBES;
 
 export interface ShapeSpec {
   kind: ShapeKind;
@@ -192,24 +330,35 @@ function rightHalf(spec: ShapeSpec): Pt[] {
         ),
       ];
     }
+    default:
+      // 管の形は tubeWall で作る
+      return rightHalf({ kind: 'fishbowl', variant: v });
   }
 }
 
 /** 形と目標容量から容器を作る（x=0 中心、上下の中央が y=0） */
 export function buildContainer(spec: ShapeSpec, targetArea: number): Container {
-  const right = rightHalf(spec);
-  const left = right
-    .slice(1)
-    .reverse()
-    .map((p) => ({ x: -p.x, y: p.y }));
-  const wall0 = [...left, ...right];
+  const tube = TUBES[spec.kind];
+  let wall0: Pt[];
+  if (tube) {
+    wall0 = tubeWall(tube.center(), tube.w);
+  } else {
+    const right = rightHalf(spec);
+    const left = right
+      .slice(1)
+      .reverse()
+      .map((p) => ({ x: -p.x, y: p.y }));
+    wall0 = [...left, ...right];
+  }
   let A = 0;
   for (let k = 0; k < wall0.length; k++) {
     const p = wall0[k];
     const q = wall0[(k + 1) % wall0.length];
     A += p.x * q.y - q.x * p.y;
   }
-  const s = Math.sqrt(targetArea / Math.abs(A / 2));
+  let s = Math.sqrt(targetArea / Math.abs(A / 2));
+  // 管は猫が通り抜けられる太さに（容量よりも太さを優先）
+  if (tube) s = Math.min(Math.max(s, TUBE_MIN_W / tube.w), TUBE_MAX_W / tube.w);
   let y0 = Infinity;
   let y1 = -Infinity;
   for (const p of wall0) {
@@ -223,11 +372,16 @@ export function buildContainer(spec: ShapeSpec, targetArea: number): Container {
   );
 }
 
+/** 管の太さ（ワールド座標）。猫1匹より少し太い */
+const TUBE_MIN_W = 175;
+const TUBE_MAX_W = 215;
+
 /** 金魚鉢 R=215 相当の容量 */
 export const BASE_AREA = 2.45 * 215 * 215;
 
 /**
- * ステージの容器。1面は金魚鉢、そのあとはフラスコやビーカー、幾何学形…と毎回変わる。
+ * ステージの容器。1面は金魚鉢、そのあとはフラスコやビーカー、幾何学形、
+ * 現実にはない曲がりくねった管（S字・クランク・螺旋）…と毎回変わる。
  * 大きさ（容量）はだんだん大きくなる。
  */
 export function stageShape(stage: number): { spec: ShapeSpec; area: number } {
@@ -242,12 +396,15 @@ export function stageShape(stage: number): { spec: ShapeSpec; area: number } {
     { kind: 'hourglass' },
     { kind: 'diamond' },
     { kind: 'vase' },
+    { kind: 'sCurve' },
+    { kind: 'crank' },
+    { kind: 'spiral' },
   ];
   // 容量はだんだん大きく（上限あり）。後半は少しランダムに揺らす
   const growth = Math.min(2.1, 1 + 0.13 * (stage - 1));
   if (stage <= fixed.length) return { spec: fixed[stage - 1], area: BASE_AREA * growth };
   // 全部見終わったら、金魚鉢（縦横比いろいろ）も含めて均等にランダム
-  const kinds: ShapeKind[] = ['fishbowl', 'wideBowl', 'beaker', 'flask', 'roundFlask', 'hexagon', 'diamond', 'hourglass', 'vase'];
+  const kinds = Object.keys(SHAPE_NAMES) as ShapeKind[];
   const spec: ShapeSpec = { kind: kinds[Math.floor(Math.random() * kinds.length)], variant: Math.random() };
   return { spec, area: BASE_AREA * growth * (0.85 + Math.random() * 0.25) };
 }
