@@ -227,32 +227,27 @@ export function buildContainer(spec: ShapeSpec, targetArea: number): Container {
 export const BASE_AREA = 2.45 * 215 * 215;
 
 /**
- * ステージの容器。基本は金魚鉢で、大きさと形が少しずつ変わる。
- * ときどき金魚鉢を逸脱して、フラスコやビーカー、幾何学形になる。
+ * ステージの容器。1面は金魚鉢、そのあとはフラスコやビーカー、幾何学形…と毎回変わる。
+ * 大きさ（容量）はだんだん大きくなる。
  */
 export function stageShape(stage: number): { spec: ShapeSpec; area: number } {
+  // 金魚鉢は1面だけ。そのあとは毎回ちがう形
   const fixed: ShapeSpec[] = [
     { kind: 'fishbowl', variant: 0.5 },
-    { kind: 'fishbowl', variant: 0.1 },
     { kind: 'beaker' },
-    { kind: 'fishbowl', variant: 0.95 },
     { kind: 'flask' },
     { kind: 'wideBowl' },
     { kind: 'hexagon' },
-    { kind: 'fishbowl', variant: 0.3 },
     { kind: 'roundFlask' },
     { kind: 'hourglass' },
-    { kind: 'fishbowl', variant: 0.7 },
     { kind: 'diamond' },
     { kind: 'vase' },
   ];
   // 容量はだんだん大きく（上限あり）。後半は少しランダムに揺らす
   const growth = Math.min(2.1, 1 + 0.13 * (stage - 1));
   if (stage <= fixed.length) return { spec: fixed[stage - 1], area: BASE_AREA * growth };
-  const others: ShapeKind[] = ['wideBowl', 'beaker', 'flask', 'roundFlask', 'hexagon', 'diamond', 'hourglass', 'vase'];
-  const spec: ShapeSpec =
-    Math.random() < 0.55
-      ? { kind: 'fishbowl', variant: Math.random() }
-      : { kind: others[Math.floor(Math.random() * others.length)] };
+  // 全部見終わったら、金魚鉢（縦横比いろいろ）も含めて均等にランダム
+  const kinds: ShapeKind[] = ['fishbowl', 'wideBowl', 'beaker', 'flask', 'roundFlask', 'hexagon', 'diamond', 'hourglass', 'vase'];
+  const spec: ShapeSpec = { kind: kinds[Math.floor(Math.random() * kinds.length)], variant: Math.random() };
   return { spec, area: BASE_AREA * growth * (0.85 + Math.random() * 0.25) };
 }
