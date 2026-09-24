@@ -356,7 +356,7 @@ export class Game {
       else if (t < 0.8) s = 1;
       else s = Math.max(0.35, 1 - (t - 0.8) / 0.6);
       this.squeeze = s * s * (3 - 2 * s);
-      this.world.gravityScale = 1 + 0.5 * this.squeeze;
+      this.world.gravityScale = 1 + 0.25 * this.squeeze;
     }
   }
 

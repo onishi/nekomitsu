@@ -33,88 +33,52 @@ body {
 
 #hud {
   position: fixed;
-  top: max(10px, env(safe-area-inset-top));
-  left: 12px;
-  right: 12px;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   pointer-events: none;
 }
 
 .pill {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 7px 14px;
-  font-size: 14px;
+  padding: 0 16px;
   box-shadow: 0 2px 8px rgba(90, 60, 30, 0.08);
   white-space: nowrap;
 }
 
-.stage {
-  letter-spacing: 0.06em;
-  font-size: 12px;
-}
-
-.stage b {
-  font-size: 16px;
-  margin-left: 2px;
-}
-
-.stage .shape {
-  margin-left: 8px;
-  letter-spacing: 0;
-  opacity: 0.75;
-}
-
-.fill {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex: 1;
-  max-width: 330px;
-  min-width: 0;
-  margin: 0 auto;
-}
-
-.bar {
-  position: relative;
-  flex: 1;
-  min-width: 50px;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(150, 110, 80, 0.15);
-  overflow: hidden;
-}
-
-#fillBar {
-  height: 100%;
-  width: 0;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-2), var(--accent));
-  transition: width 0.35s ease;
-}
-
-#fillBar.full {
-  background: linear-gradient(90deg, #f6c56b, #f08c6c);
-}
-
-#fillPct {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  min-width: 3ch;
-  text-align: right;
-}
-
-.count {
-  font-size: 12px;
+/* STAGE 3 ｜ 三角フラスコ */
+.stage .label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
   opacity: 0.7;
 }
 
-.buttons {
-  display: flex;
-  gap: 6px;
+.stage b {
+  font-size: 17px;
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stage .shape {
+  font-size: 14px;
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.stage .shape:empty {
+  display: none;
+}
+
+#soundBtn {
   pointer-events: auto;
 }
 
@@ -168,7 +132,14 @@ button.icon:active {
   font-size: 14px;
   pointer-events: none;
   transition: opacity 1.2s ease 0.8s;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  line-height: 1.5;
+}
+
+#hint span {
+  display: inline-block;
 }
 
 #hint.fade {
@@ -242,12 +213,8 @@ button.icon:active {
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 360px) {
   .pill {
-    padding: 6px 10px;
-  }
-  .count,
-  .stage .shape {
-    display: none;
+    padding: 0 12px;
   }
 }

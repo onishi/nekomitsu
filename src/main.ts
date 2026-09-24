@@ -1,5 +1,5 @@
 import './style.css';
-import { FILL_GOAL, Game } from './game';
+import { Game } from './game';
 import { drawCat } from './render/catRenderer';
 import { SHAPE_NAMES, type ShapeKind } from './physics/shapes';
 import { Effects } from './render/effects';
@@ -10,18 +10,20 @@ const ctx = canvas.getContext('2d')!;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageNum = $('stageNum');
 const shapeName = $('shapeName');
-const fillBar = $('fillBar');
-const fillPct = $('fillPct');
-const catCount = $('catCount');
 const hint = $('hint');
 const clearEl = $('clear');
 const soundBtn = $<HTMLButtonElement>('soundBtn');
-const restartBtn = $<HTMLButtonElement>('restartBtn');
 const nextBtn = $<HTMLButtonElement>('nextBtn');
 const coarse = window.matchMedia('(pointer: coarse)').matches;
-hint.textContent = coarse
-  ? '外をタップで落とす／中をなぞって混ぜる'
-  : 'クリックで落とす（← → / Space）／鉢の中をドラッグで混ぜる';
+// 狭い画面では「／」の区切りで折り返す
+const hintParts = coarse ? ['外をタップで落とす', '中をなぞって混ぜる'] : ['クリックで落とす（← → / Space）', '鉢の中をドラッグで混ぜる'];
+hint.replaceChildren(
+  ...hintParts.flatMap((t, i) => {
+    const span = document.createElement('span');
+    span.textContent = i < hintParts.length - 1 ? `${t}／` : t;
+    return [span];
+  }),
+);
 
 const game = new Game();
 const view: View = { scale: 1, ox: 0, oy: 0, dpr: 1, w: 1, h: 1 };
@@ -114,8 +116,6 @@ window.addEventListener('keydown', (e) => {
     // 吊るしている猫がいれば落とす。クリア後で猫がいなければ次のステージへ
     if (game.held) game.drop();
     else if (game.phase === 'cleared') goNext();
-  } else if (e.key === 'r' || e.key === 'R') {
-    game.restart();
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key));
@@ -144,14 +144,6 @@ soundBtn.addEventListener('click', () => {
   }
   syncSound();
   soundBtn.blur();
-});
-restartBtn.addEventListener('click', () => {
-  game.sound.unlock();
-  game.restart();
-  fx.clear();
-  clearEl.hidden = true;
-  layout();
-  restartBtn.blur();
 });
 function goNext(): void {
   if (game.phase !== 'cleared' || performance.now() - clearShownAt < 900) return;
@@ -277,13 +269,6 @@ function render(): void {
   // HUD
   stageNum.textContent = String(game.stage);
   shapeName.textContent = SHAPE_NAMES[game.bowl.kind as ShapeKind] ?? '';
-  // クリア後は押し合いで数値が揺れないよう、クリア時の値を表示
-  const shownFill = game.phase === 'cleared' ? game.clearFill : game.fill;
-  const pct = Math.round(shownFill * 100);
-  fillPct.textContent = `${pct}%`;
-  fillBar.style.width = `${Math.min(100, (shownFill / FILL_GOAL) * 100)}%`;
-  fillBar.classList.toggle('full', shownFill >= FILL_GOAL);
-  catCount.textContent = `${game.cats.length}匹`;
 }
 
 layout();

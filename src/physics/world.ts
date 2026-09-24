@@ -614,6 +614,9 @@ export class World {
     }
     let e = 0;
     for (const p of this.polys) {
+      // 吊るされている猫（kinematic）は何にも当たらない。
+      // 動かない物体に押し付けられた猫が震えるのを防ぐ
+      if (p.body.kinematic) continue;
       const m = p.idx.length;
       for (let k = 0; k < m; k++) {
         this.eA[e] = p.idx[k];

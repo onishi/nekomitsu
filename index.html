@@ -10,20 +10,10 @@
   <body>
     <canvas id="game" aria-label="金魚鉢に猫を落とすゲーム"></canvas>
     <div id="hud">
-      <div class="pill stage">STAGE <b id="stageNum">1</b><span id="shapeName" class="shape"></span></div>
-      <div class="pill fill" title="充填率（100%を超えたらクリア）">
-        <div class="bar"><div id="fillBar"></div></div>
-        <span id="fillPct">0%</span>
-        <span id="catCount" class="count">0匹</span>
-      </div>
-      <div class="buttons">
-        <button id="restartBtn" class="icon" aria-label="リスタート" title="リスタート (R)">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.5 4v4h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button id="soundBtn" class="icon" aria-label="サウンドOFF" title="サウンド ON/OFF">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
-      </div>
+      <div class="pill stage"><span class="label">STAGE</span><b id="stageNum">1</b><span id="shapeName" class="shape"></span></div>
+      <button id="soundBtn" class="icon" aria-label="サウンドOFF" title="サウンド ON/OFF">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="mute" d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
     </div>
     <div id="hint">左右に動かして、タップで落とす</div>
     <div id="clear" hidden>

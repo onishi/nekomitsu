@@ -373,6 +373,8 @@ export class Cat {
     world.setKinematic(body, true);
   }
 
+  private headGoal = 0;
+  private headGoalInit = false;
   private uprightBody = 0;
   private uprightHead = 0;
 
@@ -397,7 +399,12 @@ export class Cat {
         out -= up * this.uprightHead;
       }
       rel = clamp(wrapAngle(out - ba), -0.8, 0.8);
-      return ba + rel;
+      out = ba + rel;
+      // 頭の向きの目標は急に変えない（押し合いで目標が行ったり来たりしても顔が震えない）
+      if (this.headGoalInit) out = this.headGoal + clamp(wrapAngle(out - this.headGoal), -0.03, 0.03);
+      this.headGoal = out;
+      this.headGoalInit = true;
+      return out;
     };
   }
 
@@ -642,7 +649,7 @@ export class Cat {
     // --- 呼吸・クリア時のむにゅっ ---
     const sleeping = this.expression === 'sleep' || this.expression === 'happy';
     const breath = sleeping ? 0.02 * Math.sin(env.time * 2.3 + this.phase) : 0;
-    this.bodyArea.scale = (1 + breath) * (1 - 0.07 * env.squeeze);
+    this.bodyArea.scale = (1 + breath) * (1 - 0.05 * env.squeeze);
 
     this.updateAction(dt, env);
 
@@ -746,15 +753,17 @@ export class Cat {
     } else if (this.action === 'lick' && this.lickTarget) {
       const o = this.lickTarget;
       const hf = this.headFrame();
-      const dx = o.cx - hf.x;
-      const side = dx >= 0 ? 1 : -1;
+      // 相手の左右は舐め始めに決めて固定する（毎フレーム決め直すと、真横にいるとき顔が左右に震える）
+      if (this.lickSide === 0) this.lickSide = o.cx - hf.x >= 0 ? 1 : -1;
+      if (this.lickUp === 0) this.lickUp = o.cy - hf.y > 0 ? 1 : -1;
+      const side = this.lickSide;
       this.headAim = 0.35 * side + Math.sin(t * 10) * 0.12;
       tongue = t > 0.3 ? 0.55 + 0.45 * Math.abs(Math.sin(t * 10)) : 0;
       this.tongueSide = side;
       // 相手の方へ頭を少し寄せる
       for (const i of this.head) {
         w.ax[i] = side * 160;
-        w.ay[i] = (o.cy - hf.y > 0 ? 1 : -1) * 60;
+        w.ay[i] = this.lickUp * 60;
       }
       if (t > 0.3) {
         if (o.licked <= 0) env.event('lick', o, 1);
@@ -786,7 +795,12 @@ export class Cat {
   }
   private pokeTimer = 0;
 
+  private lickSide = 0;
+  private lickUp = 0;
+
   private startAction(a: CatAction, dur: number, target: Cat | null): void {
+    this.lickSide = 0;
+    this.lickUp = 0;
     this.action = a;
     this.actionTime = 0;
     this.actionDur = dur;
