@@ -2,24 +2,25 @@
 import { Sound } from './audio';
 import { Cat, type CatEnv, type CatEvent } from './cat/cat';
 import { COATS, SPECIES, withGirth, type Coat, type Species, type SpeciesKey } from './cat/catTypes';
-import { Bowl } from './physics/bowl';
+import type { Container } from './physics/container';
+import { buildContainer, SHAPE_NAMES, stageShape, type ShapeKind, type ShapeSpec } from './physics/shapes';
 import { World } from './physics/world';
 
 /** 充填率がこれを超えたらクリア（猫の量が金魚鉢の容量を超える = はみ出す） */
 export const FILL_GOAL = 1.0;
 
-interface StageDef {
-  R: number;
-  kinds: SpeciesKey[];
-}
+/** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
+const KINDS: SpeciesKey[] = ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'];
 
-const STAGES: StageDef[] = [
-  { R: 215, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 245, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 270, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 295, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 315, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
-];
+/** URL の ?shape=flask などで容器の形を固定できる（動作確認用） */
+const forcedShape = (() => {
+  try {
+    const k = new URLSearchParams(globalThis.location?.search ?? '').get('shape');
+    return k && k in SHAPE_NAMES ? (k as ShapeKind) : null;
+  } catch {
+    return null;
+  }
+})();
 
 /** URL の ?cat=long などで体型を固定できる（動作確認用） */
 const forcedSpecies = (() => {
@@ -35,7 +36,10 @@ export type Phase = 'playing' | 'judging' | 'cleared';
 
 export class Game {
   stage = 1;
-  bowl: Bowl;
+  /** 容器（金魚鉢・フラスコ…） */
+  bowl: Container;
+  /** 現在のステージの形（リスタートで同じ形を使う） */
+  private shape: { spec: ShapeSpec; area: number } = stageShape(1);
   world: World;
   cats: Cat[] = [];
   held: Cat | null = null;
@@ -66,7 +70,7 @@ export class Game {
   onCatEvent: ((kind: CatEvent, cat: Cat, strength: number) => void) | null = null;
 
   constructor() {
-    this.bowl = new Bowl(STAGES[0].R);
+    this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world = new World(this.bowl);
     const game = this;
     this.env = {
@@ -87,18 +91,19 @@ export class Game {
     this.startStage(1);
   }
 
-  get stageDef(): StageDef {
-    return STAGES[Math.min(this.stage - 1, STAGES.length - 1)];
-  }
-
   /** 吊るす位置の高さ */
   get dropY(): number {
     return this.bowl.openY - this.bowl.R * 0.72;
   }
 
-  startStage(n: number): void {
+  /** keepShape: リスタート時は同じ形・大きさのまま */
+  startStage(n: number, keepShape = false): void {
+    if (!keepShape || n !== this.stage) {
+      this.shape = stageShape(n);
+      if (forcedShape) this.shape = { spec: { kind: forcedShape, variant: 0.5 }, area: this.shape.area };
+    }
     this.stage = n;
-    this.bowl = new Bowl(this.stageDef.R);
+    this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world.clear();
     this.world.setBowl(this.bowl);
     this.world.gravityScale = 1;
@@ -117,7 +122,7 @@ export class Game {
   }
 
   restart(): void {
-    this.startStage(this.stage);
+    this.startStage(this.stage, true);
   }
 
   nextStage(): void {
@@ -126,7 +131,7 @@ export class Game {
 
   private pickSpecies(): Species {
     if (forcedSpecies) return SPECIES[forcedSpecies];
-    const kinds = this.stageDef.kinds;
+    const kinds = KINDS;
     // 最初の1匹は「ふつうの猫」で核の体験を確実に
     if (this.dropsThisStage === 0 && this.stage === 1) return SPECIES.standard;
     let tot = 0;
@@ -163,7 +168,8 @@ export class Game {
   }
 
   clampX(x: number, sp: Species): number {
-    const lim = this.bowl.openHalfW - sp.a * 0.95 - 6;
+    // 口が猫より狭い容器（フラスコなど）では中央から落とす
+    const lim = Math.max(0, this.bowl.openHalfW - sp.a * 0.95 - 6);
     return Math.max(-lim, Math.min(lim, x));
   }
 
@@ -291,9 +297,9 @@ export class Game {
     const pts: number[] = [];
     let cap = 0;
     for (let y = this.dropY + step / 2; y < b.bottomY; y += step) {
-      for (let x = -b.R + step / 2; x < b.R; x += step) {
+      for (let x = -b.halfW + step / 2; x < b.halfW; x += step) {
         if (y >= b.openY) {
-          if (x * x + y * y < b.R * b.R) {
+          if (b.contains(x, y)) {
             pts.push(x, y);
             cap++;
           }
@@ -303,7 +309,7 @@ export class Game {
       }
     }
     this.fillCells = Float64Array.from(pts);
-    this.fillCapacity = cap;
+    this.fillCapacity = Math.max(1, cap);
   }
   private fillCapacity = 1;
 

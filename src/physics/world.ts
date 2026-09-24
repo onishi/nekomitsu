@@ -9,7 +9,7 @@
  *
  * 物理と描画は分離しており、この層は猫の見た目について何も知らない。
  */
-import { Bowl, type Contact } from './bowl';
+import type { Container, Contact } from './container';
 
 export const CONTACT_BOWL = 1;
 export const CONTACT_CAT = 2;
@@ -273,7 +273,8 @@ export class World {
   gravityScale = 1;
   substeps = 4;
   frameDt = 1 / 60;
-  bowl: Bowl;
+  /** 容器（金魚鉢・フラスコ…） */
+  bowl: Container;
   glassFriction = 0.12;
 
   // edge grid
@@ -291,7 +292,7 @@ export class World {
   private eRad = new Float64Array(1024);
   private subK = new Map<number, number>();
 
-  constructor(bowl: Bowl, cap = 4096) {
+  constructor(bowl: Container, cap = 4096) {
     this.cap = cap;
     this.x = new Float64Array(cap);
     this.y = new Float64Array(cap);
@@ -313,13 +314,13 @@ export class World {
     this.setBowl(bowl);
   }
 
-  setBowl(bowl: Bowl): void {
+  setBowl(bowl: Container): void {
     this.bowl = bowl;
-    const R = bowl.R;
-    this.gx0 = -R * 1.2;
-    this.gy0 = -R * 4;
-    this.cols = Math.ceil((R * 2.4) / this.cell) + 1;
-    this.rows = Math.ceil((R * 5.2) / this.cell) + 1;
+    const hw = bowl.halfW * 1.25;
+    this.gx0 = -hw;
+    this.gy0 = bowl.openY - bowl.R * 3;
+    this.cols = Math.ceil((hw * 2) / this.cell) + 1;
+    this.rows = Math.ceil((bowl.bottomY + bowl.R * 0.3 - this.gy0) / this.cell) + 1;
     this.cellStart = new Int32Array(this.cols * this.rows + 1);
   }
 

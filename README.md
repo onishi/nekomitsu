@@ -33,6 +33,7 @@ npm run deploy     # ビルドして Cloudflare Workers（静的アセット）�
 動作確認用の URL パラメータ:
 
 - `?cat=long` — 落とす猫の体型を固定（`standard` / `slim` / `long` / `round` / `kitten` / `fluffy`）
+- `?shape=flask` — 容器の形を固定（`fishbowl` / `wideBowl` / `beaker` / `flask` / `roundFlask` / `hexagon` / `diamond` / `hourglass` / `vase`）
 - `?perf` — 描画時間を `window.__perf` に記録
 
 ## しくみ
@@ -50,6 +51,16 @@ Matter.js などの剛体ライブラリも検討しましたが、「本来の�
 - **衝突**: 粒子 vs 他の猫の輪郭ポリゴン（辺を厚みのあるカプセルとして扱う）、粒子 vs 金魚鉢の曲面。
   ガラスは摩擦を小さく、毛並み同士は少し大きく
 - 空間グリッドで近傍の辺だけを調べる。18匹（約730粒子）で物理は 1フレーム 3ms 前後
+
+### 容器（`src/physics/container.ts`, `shapes.ts`）
+
+ステージごとに大きさと形が変わります。基本は金魚鉢（縦横比や口の広さが少しずつ違う）で、
+ときどきビーカー・三角フラスコ・丸底フラスコ・どんぶり・六角形・ひし形・砂時計・花瓶になります。
+13ステージ目以降はランダム。容量はステージが進むにつれて大きくなります。
+
+形は「口の左端 → 底 → 口の右端」の内壁の折れ線で表し、物理（粒子を内側へ押し戻す）と描画（ガラス・反射・口の縁）で共通に使います。
+壁から十分離れた内側の粒子は判定を省略するグリッドを持っているので、形が複雑でも軽いです。
+フラスコの首や砂時計のくびれは猫より細く、猫が液体のように形を変えて通り抜けます。
 
 ### 猫（`src/cat/`）
 
@@ -117,7 +128,8 @@ src/
   game.ts            ステージ・投下・充填率・クリア
   audio.ts           効果音
   physics/world.ts   soft-body ソルバ
-  physics/bowl.ts    金魚鉢の形状と衝突
+  physics/container.ts  容器の形状と衝突
+  physics/shapes.ts  容器の形（金魚鉢・フラスコ・幾何学形…）とステージの割り当て
   cat/cat.ts         猫の構成・表情・居心地補助
   cat/catTypes.ts    体型と毛色
   render/catRenderer.ts  猫の描画

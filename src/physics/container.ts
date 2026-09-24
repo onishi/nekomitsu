@@ -1,0 +1,215 @@
+/**
+ * 猫を入れる容器（金魚鉢・フラスコ・ビーカー・幾何学形…）。
+ *
+ * 形は「口の左端 → 底 → 口の右端」の内壁の折れ線で表す（左右対称、y 下向き）。
+ * 物理の内壁 = 描画上のガラス内面。口より上は見えない垂直の壁で、はみ出した猫を支える。
+ */
+export interface Contact {
+  x: number;
+  y: number;
+  /** 押し戻し方向（内向き） */
+  nx: number;
+  ny: number;
+  hit: boolean;
+}
+
+export type Pt = { x: number; y: number };
+
+export class Container {
+  readonly kind: string;
+  /** 内壁（口の左端 → 底 → 口の右端） */
+  readonly wall: Pt[];
+  /** 大きさの目安（同じ容量の金魚鉢の半径相当） */
+  readonly R: number;
+  /** 口の高さ */
+  readonly openY: number;
+  /** 口の半幅 */
+  readonly openHalfW: number;
+  /** 底（いちばん下） */
+  readonly bottomY: number;
+  /** 平らな底の半幅（丸底・尖った底なら小さい） */
+  readonly bottomHalfW: number;
+  /** いちばん広いところの半幅 */
+  readonly halfW: number;
+  /** 容量（口まで） */
+  readonly area: number;
+
+  // 衝突用: 口の上へ延長した壁
+  private readonly segAx: Float64Array;
+  private readonly segAy: Float64Array;
+  private readonly segBx: Float64Array;
+  private readonly segBy: Float64Array;
+  /** 各辺の内向き法線 */
+  private readonly segNx: Float64Array;
+  private readonly segNy: Float64Array;
+  private readonly polyX: Float64Array;
+  private readonly polyY: Float64Array;
+  // 「壁から十分離れた内側」を覚えておくグリッド（ほとんどの粒子は判定を省略できる）
+  private readonly gCell = 14;
+  private readonly gx0: number;
+  private readonly gy0: number;
+  private readonly gCols: number;
+  private readonly gRows: number;
+  private readonly safe: Float32Array;
+
+  constructor(kind: string, wall: Pt[]) {
+    this.kind = kind;
+    this.wall = wall;
+    this.openY = wall[0].y;
+    this.openHalfW = Math.abs(wall[0].x);
+    let by = -Infinity;
+    let hw = 0;
+    for (const p of wall) {
+      by = Math.max(by, p.y);
+      hw = Math.max(hw, Math.abs(p.x));
+    }
+    this.bottomY = by;
+    this.halfW = hw;
+    let bw = 0;
+    for (const p of wall) if (by - p.y < 1.5) bw = Math.max(bw, Math.abs(p.x));
+    this.bottomHalfW = bw;
+    let A = 0;
+    for (let k = 0; k < wall.length; k++) {
+      const p = wall[k];
+      const q = wall[(k + 1) % wall.length];
+      A += p.x * q.y - q.x * p.y;
+    }
+    this.area = Math.abs(A / 2);
+    this.R = Math.sqrt(this.area / 2.45);
+
+    // 口の上へ壁を延長して閉じた多角形にする
+    const top = this.openY - this.R * 20;
+    const ext: Pt[] = [{ x: wall[0].x, y: top }, ...wall, { x: wall[wall.length - 1].x, y: top }];
+    const n = ext.length;
+    this.polyX = Float64Array.from(ext.map((p) => p.x));
+    this.polyY = Float64Array.from(ext.map((p) => p.y));
+    // 閉じる辺（遠い上空）は壁ではないので除外
+    const m = n - 1;
+    this.segAx = new Float64Array(m);
+    this.segAy = new Float64Array(m);
+    this.segBx = new Float64Array(m);
+    this.segBy = new Float64Array(m);
+    this.segNx = new Float64Array(m);
+    this.segNy = new Float64Array(m);
+    let sA = 0;
+    for (let k = 0; k < n; k++) {
+      const p = ext[k];
+      const q = ext[(k + 1) % n];
+      sA += p.x * q.y - q.x * p.y;
+    }
+    const orient = sA > 0 ? 1 : -1;
+    for (let k = 0; k < m; k++) {
+      const a = ext[k];
+      const b = ext[k + 1];
+      this.segAx[k] = a.x;
+      this.segAy[k] = a.y;
+      this.segBx[k] = b.x;
+      this.segBy[k] = b.y;
+      const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      // 符号付き面積が正なら内側は辺の左手（y 下向き座標での式どおり）
+      this.segNx[k] = (-(b.y - a.y) / l) * orient;
+      this.segNy[k] = ((b.x - a.x) / l) * orient;
+    }
+
+    const c = this.gCell;
+    this.gx0 = -hw - c * 2;
+    this.gy0 = this.openY - this.R * 1.4;
+    this.gCols = Math.ceil((hw * 2 + c * 4) / c);
+    this.gRows = Math.ceil((by - this.gy0 + c * 2) / c);
+    this.safe = new Float32Array(this.gCols * this.gRows);
+    for (let j = 0; j < this.gRows; j++) {
+      for (let i = 0; i < this.gCols; i++) {
+        const x = this.gx0 + (i + 0.5) * c;
+        const y = this.gy0 + (j + 0.5) * c;
+        this.safe[j * this.gCols + i] = this.insideExt(x, y) ? this.wallDist(x, y) - c * 0.71 : -1;
+      }
+    }
+  }
+
+  private insideExt(px: number, py: number): boolean {
+    const xs = this.polyX;
+    const ys = this.polyY;
+    const n = xs.length;
+    let inside = false;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      if (ys[i] > py !== ys[j] > py && px < ((xs[j] - xs[i]) * (py - ys[i])) / (ys[j] - ys[i]) + xs[i]) inside = !inside;
+    }
+    return inside;
+  }
+
+  private wallDist(px: number, py: number): number {
+    let best = Infinity;
+    for (let k = 0; k < this.segAx.length; k++) {
+      const ax = this.segAx[k];
+      const ay = this.segAy[k];
+      const ex = this.segBx[k] - ax;
+      const ey = this.segBy[k] - ay;
+      const l2 = ex * ex + ey * ey;
+      let t = l2 > 0 ? ((px - ax) * ex + (py - ay) * ey) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = ax + ex * t - px;
+      const dy = ay + ey * t - py;
+      best = Math.min(best, dx * dx + dy * dy);
+    }
+    return Math.sqrt(best);
+  }
+
+  /** 点が容器の内側（口まで）にあるか */
+  contains(x: number, y: number): boolean {
+    return y >= this.openY && this.insideExt(x, y);
+  }
+
+  /** 半径 r の粒子を内側へ押し戻す。out に結果を書き込む。 */
+  collide(x: number, y: number, r: number, out: Contact): void {
+    out.hit = false;
+    out.x = x;
+    out.y = y;
+    const gi = Math.floor((x - this.gx0) / this.gCell);
+    const gj = Math.floor((y - this.gy0) / this.gCell);
+    if (gi >= 0 && gj >= 0 && gi < this.gCols && gj < this.gRows && this.safe[gj * this.gCols + gi] > r) return;
+
+    const inside = this.insideExt(x, y);
+    let best = Infinity;
+    let bk = 0;
+    let qx = 0;
+    let qy = 0;
+    for (let k = 0; k < this.segAx.length; k++) {
+      const ax = this.segAx[k];
+      const ay = this.segAy[k];
+      const ex = this.segBx[k] - ax;
+      const ey = this.segBy[k] - ay;
+      const l2 = ex * ex + ey * ey;
+      let t = l2 > 0 ? ((x - ax) * ex + (y - ay) * ey) / l2 : 0;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const cx = ax + ex * t;
+      const cy = ay + ey * t;
+      const d = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+      if (d < best) {
+        best = d;
+        bk = k;
+        qx = cx;
+        qy = cy;
+      }
+    }
+    const d = Math.sqrt(best);
+    if (inside && d >= r) return;
+    let nx: number;
+    let ny: number;
+    if (d > 1e-6) {
+      nx = (x - qx) / d;
+      ny = (y - qy) / d;
+      if (!inside) {
+        nx = -nx;
+        ny = -ny;
+      }
+    } else {
+      nx = this.segNx[bk];
+      ny = this.segNy[bk];
+    }
+    out.x = qx + nx * r;
+    out.y = qy + ny * r;
+    out.nx = nx;
+    out.ny = ny;
+    out.hit = true;
+  }
+}

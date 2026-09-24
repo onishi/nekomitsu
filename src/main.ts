@@ -1,13 +1,15 @@
 import './style.css';
 import { FILL_GOAL, Game } from './game';
 import { drawCat } from './render/catRenderer';
+import { SHAPE_NAMES, type ShapeKind } from './physics/shapes';
 import { Effects } from './render/effects';
-import { drawBackground, drawBowlBack, drawBowlFront, type View } from './render/scene';
+import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const stageNum = $('stageNum');
+const shapeName = $('shapeName');
 const fillBar = $('fillBar');
 const fillPct = $('fillPct');
 const catCount = $('catCount');
@@ -35,9 +37,9 @@ function layout(): void {
   const b = game.bowl;
   const R = b.R;
   // 見せたい範囲: 吊るされた猫〜テーブル
-  const top = game.dropY - R * 0.38;
-  const bottom = b.bottomY + R * 0.14;
-  const halfW = R * 1.04;
+  const top = game.dropY - Math.max(R * 0.38, 90);
+  const bottom = tableWorldY(b) + R * 0.1;
+  const halfW = Math.max(b.halfW * 1.06, 200);
   const hudH = 56;
   const scale = Math.min(w / (halfW * 2), (h - hudH) / (bottom - top));
   view.scale = scale;
@@ -237,6 +239,7 @@ function render(): void {
   }
   // HUD
   stageNum.textContent = String(game.stage);
+  shapeName.textContent = SHAPE_NAMES[game.bowl.kind as ShapeKind] ?? '';
   // クリア後は押し合いで数値が揺れないよう、クリア時の値を表示
   const shownFill = game.phase === 'cleared' ? game.clearFill : game.fill;
   const pct = Math.round(shownFill * 100);

@@ -62,6 +62,12 @@ body {
   margin-left: 2px;
 }
 
+.stage .shape {
+  margin-left: 8px;
+  letter-spacing: 0;
+  opacity: 0.75;
+}
+
 .fill {
   display: flex;
   align-items: center;
@@ -239,7 +245,8 @@ button.icon:active {
   .pill {
     padding: 6px 10px;
   }
-  .count {
+  .count,
+  .stage .shape {
     display: none;
   }
 }

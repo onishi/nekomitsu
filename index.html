@@ -10,8 +10,8 @@
   <body>
     <canvas id="game" aria-label="金魚鉢に猫を落とすゲーム"></canvas>
     <div id="hud">
-      <div class="pill stage">STAGE <b id="stageNum">1</b></div>
-      <div class="pill fill" title="充填率（90%でクリア）">
+      <div class="pill stage">STAGE <b id="stageNum">1</b><span id="shapeName" class="shape"></span></div>
+      <div class="pill fill" title="充填率（100%を超えたらクリア）">
         <div class="bar"><div id="fillBar"></div></div>
         <span id="fillPct">0%</span>
         <span id="catCount" class="count">0匹</span>
@@ -30,7 +30,7 @@
       <div class="card">
         <div class="title">FULL OF CATS!</div>
         <div class="sub">猫でいっぱい！</div>
-        <button id="nextBtn">つぎの金魚鉢へ</button>
+        <button id="nextBtn">つぎのステージへ</button>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
