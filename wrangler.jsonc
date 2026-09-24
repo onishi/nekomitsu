@@ -5,5 +5,9 @@
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"
-  }
+  },
+  // 公開は独自ドメインのみ（workers.dev のURLは使わない）
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "nekomitsu.wagaya.org", "custom_domain": true }]
 }

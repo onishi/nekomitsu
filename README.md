@@ -52,7 +52,7 @@ npm run sim        # 物理だけをヘッドレスで回して、安定性・�
 npm run deploy     # ビルドして Cloudflare Workers（静的アセット）へデプロイ
 ```
 
-公開URL: https://nekomitsu.wagaya.workers.dev
+公開URL: https://nekomitsu.wagaya.org
 
 デプロイには `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID`（または `wrangler login`）が必要です。設定は `wrangler.jsonc`。
 
