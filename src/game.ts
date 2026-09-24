@@ -6,10 +6,8 @@ import type { Container } from './physics/container';
 import { buildContainer, SHAPE_NAMES, stageShape, type ShapeKind, type ShapeSpec } from './physics/shapes';
 import { World } from './physics/world';
 import { Keshi, keshiSpecies } from './keshi';
-import { BASE_AREA } from './physics/shapes';
+import { BASE_AREA, FILL_GOALS } from './physics/shapes';
 
-/** 充填率がこれを超えたらクリア（猫の量が金魚鉢の容量を超える = はみ出す） */
-export const FILL_GOAL = 1.0;
 
 /** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
 const KINDS: SpeciesKey[] = ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'];
@@ -57,7 +55,7 @@ export class Game {
   /** 容器（金魚鉢・フラスコ…） */
   bowl: Container;
   /** 現在のステージの形（リスタートで同じ形を使う） */
-  private shape: { spec: ShapeSpec; area: number } = stageShape(1);
+  private shape: { spec: ShapeSpec; area: number; goal: number } = stageShape(1);
   world: World;
   cats: Cat[] = [];
   held: Cat | null = null;
@@ -120,6 +118,11 @@ export class Game {
     this.startStage(1);
   }
 
+  /** このステージのクリア条件（充填率）。形ごとに「口から少し盛り上がるくらい」になる値 */
+  get fillGoal(): number {
+    return this.shape.goal;
+  }
+
   /** 吊るす位置の高さ */
   get dropY(): number {
     return this.bowl.openY - this.bowl.R * 0.72;
@@ -140,7 +143,7 @@ export class Game {
   private startKeshi(): void {
     this.keshi = new Keshi(this);
     this.stage = 1;
-    this.shape = { spec: { kind: 'fishbowl', variant: 0.5 }, area: BASE_AREA * Game.KESHI_AREA };
+    this.shape = { spec: { kind: 'fishbowl', variant: 0.5 }, area: BASE_AREA * Game.KESHI_AREA, goal: 1 };
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world.clear();
     this.world.setBowl(this.bowl);
@@ -155,6 +158,26 @@ export class Game {
     this.env.cleared = false;
     this.spawnHeld();
     this.heldIntro = 1;
+  }
+
+  /**
+   * 万一、物理の値が壊れた（非数・無限大・遠くへ飛んだ）猫がいたら取り除いて続行する。
+   * 壊れた値のまま描画や計算を続けると、ブラウザが重くなったり止まったりしうるため。
+   */
+  private removeBrokenCats(): void {
+    const w = this.world;
+    const lim = this.bowl.R * 20;
+    for (const c of this.cats.slice()) {
+      const b = c.body;
+      for (let i = b.start; i < b.start + b.count; i++) {
+        const x = w.x[i];
+        const y = w.y[i];
+        if (!(Math.abs(x) < lim && Math.abs(y) < lim && Math.abs(w.vx[i]) < 1e5 && Math.abs(w.vy[i]) < 1e5)) {
+          this.removeCat(c);
+          break;
+        }
+      }
+    }
   }
 
   /** 猫を金魚鉢から取り除く（ねこけしの融合・消滅） */
@@ -172,7 +195,7 @@ export class Game {
   startStage(n: number, keepShape = false): void {
     if (!keepShape || n !== this.stage) {
       this.shape = stageShape(n);
-      if (forcedShape) this.shape = { spec: { kind: forcedShape, variant: 0.5 }, area: this.shape.area };
+      if (forcedShape) this.shape = { spec: { kind: forcedShape, variant: 0.5 }, area: this.shape.area, goal: FILL_GOALS[forcedShape] };
     }
     // 表示していた猫は消さずに次へ持ち越す（必ず落とせる）
     const carry = this.held
@@ -417,6 +440,7 @@ export class Game {
     this.keshi?.beforeStep(dt);
     this.world.beginFrame();
     this.world.step();
+    this.removeBrokenCats();
 
     if (this.keshi) {
       this.keshi.afterStep(dt);
@@ -434,7 +458,7 @@ export class Game {
 
   private updatePhase(dt: number): void {
     if (this.phase === 'playing') {
-      const full = this.fill >= FILL_GOAL || this.overflowing();
+      const full = this.fill >= this.fillGoal || this.overflowing();
       if (full && this.cats.length > 0) {
         this.phase = 'judging';
         this.judgeTimer = 0;
@@ -446,8 +470,8 @@ export class Game {
       for (const c of this.cats) maxSpeed = Math.max(maxSpeed, c.avgSpeed);
       const settled = maxSpeed < 45 && this.judgeTimer > 1.0;
       if (settled || this.judgeTimer > 4) {
-        if (this.fill >= FILL_GOAL || this.overflowing()) {
-          this.clearReason = this.fill >= FILL_GOAL ? 'fill' : 'overflow';
+        if (this.fill >= this.fillGoal || this.overflowing()) {
+          this.clearReason = this.fill >= this.fillGoal ? 'fill' : 'overflow';
           this.phase = 'cleared';
           this.clearTime = this.time;
           this.clearFill = this.fill;

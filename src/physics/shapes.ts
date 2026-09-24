@@ -372,6 +372,28 @@ export function buildContainer(spec: ShapeSpec, targetArea: number): Container {
   );
 }
 
+/**
+ * ねこみつのクリア条件（充填率 = 猫の面積 ÷ 口までの容量）。
+ * 猫どうしの隙間は数えないので、同じ「口から少し盛り上がるくらい」でも形によって値が違う。
+ * 1匹ずつ落として山が落ち着くのを待つシミュレーションで、
+ * 山のてっぺんが口の上 45px（猫の半分くらい）に届いたときの充填率を形ごとに測り、その中央値から決めた。
+ */
+export const FILL_GOALS: Record<ShapeKind, number> = {
+  // 形: 中央値（口に届いたとき → 口の上45pxまで盛ったとき）から、盛った値の少し手前に設定
+  fishbowl: 0.94, // 85 → 96
+  wideBowl: 0.8, // 75 → 82（広く浅いので、薄く積むだけで口より上に出る）
+  beaker: 0.97, // 89 → 99
+  flask: 0.97, // 93 → 101
+  roundFlask: 0.95, // 91 → 97
+  hexagon: 0.94, // 90 → 96
+  diamond: 0.93, // 84 → 95
+  hourglass: 0.96, // 84 → 98
+  vase: 0.95, // 91 → 97
+  sCurve: 0.93, // 95 → 95（管は口が細く、盛っても量がほとんど増えない）
+  crank: 0.93, // 92 → 95
+  spiral: 0.94, // 94 → 96
+};
+
 /** 管の太さ（ワールド座標）。猫1匹より少し太い */
 const TUBE_MIN_W = 175;
 const TUBE_MAX_W = 215;
@@ -384,7 +406,7 @@ export const BASE_AREA = 2.45 * 215 * 215;
  * 現実にはない曲がりくねった管（S字・クランク・螺旋）…と毎回変わる。
  * 大きさ（容量）はだんだん大きくなる。
  */
-export function stageShape(stage: number): { spec: ShapeSpec; area: number } {
+export function stageShape(stage: number): { spec: ShapeSpec; area: number; goal: number } {
   // 金魚鉢は1面だけ。そのあとは毎回ちがう形
   const fixed: ShapeSpec[] = [
     { kind: 'fishbowl', variant: 0.5 },
@@ -402,9 +424,9 @@ export function stageShape(stage: number): { spec: ShapeSpec; area: number } {
   ];
   // 容量はだんだん大きく（上限あり）。後半は少しランダムに揺らす
   const growth = Math.min(2.1, 1 + 0.13 * (stage - 1));
-  if (stage <= fixed.length) return { spec: fixed[stage - 1], area: BASE_AREA * growth };
+  if (stage <= fixed.length) return { spec: fixed[stage - 1], area: BASE_AREA * growth, goal: FILL_GOALS[fixed[stage - 1].kind] };
   // 全部見終わったら、金魚鉢（縦横比いろいろ）も含めて均等にランダム
   const kinds = Object.keys(SHAPE_NAMES) as ShapeKind[];
   const spec: ShapeSpec = { kind: kinds[Math.floor(Math.random() * kinds.length)], variant: Math.random() };
-  return { spec, area: BASE_AREA * growth * (0.85 + Math.random() * 0.25) };
+  return { spec, area: BASE_AREA * growth * (0.85 + Math.random() * 0.25), goal: FILL_GOALS[spec.kind] };
 }

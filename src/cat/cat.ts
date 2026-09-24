@@ -49,10 +49,10 @@ export interface CatEnv {
 }
 
 const TAU = Math.PI * 2;
+/** 角度を -π..π に。ループを使わない（極端な値でも止まらない） */
 const wrapAngle = (a: number) => {
-  while (a > Math.PI) a -= TAU;
-  while (a < -Math.PI) a += TAU;
-  return a;
+  if (!Number.isFinite(a)) return 0;
+  return a - TAU * Math.round(a / TAU);
 };
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
 const smooth = (e0: number, e1: number, v: number) => {

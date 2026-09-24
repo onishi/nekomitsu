@@ -12,6 +12,7 @@ export class Sound {
   private lastMunyu = 0;
   private lastPurr = 0;
   private lastPosu = 0;
+  private lastPop = 0;
   private createdAt = 0;
   private lastSupo = 0;
 
@@ -271,6 +272,9 @@ export class Sound {
     const ctx = this.ready();
     if (!ctx) return;
     const t = ctx.currentTime;
+    // 同時にたくさん消えても音を重ねすぎない
+    if (t - this.lastPop < 0.06) return;
+    this.lastPop = t;
     const up = Math.pow(1.12, Math.min(8, chain - 1));
     // ぽ: 泡がはじけるような上昇音
     const o = ctx.createOscillator();
