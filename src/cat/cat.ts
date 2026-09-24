@@ -520,7 +520,7 @@ export class Cat {
       w.ay[i] = 0;
     }
     if (this.landed && !env.cleared) {
-      const ooze = 260 * smooth(0.2, 2.5, this.calm);
+      const ooze = 340 * smooth(0.2, 2.5, this.calm);
       if (ooze > 0) {
         for (let k = 0; k < N; k++) {
           const i = this.ring[k];

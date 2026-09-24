@@ -1,5 +1,5 @@
 /** 猫の体型（物理パラメータ） */
-export type SpeciesKey = 'standard' | 'long' | 'round' | 'kitten' | 'fluffy';
+export type SpeciesKey = 'standard' | 'slim' | 'long' | 'round' | 'kitten' | 'fluffy';
 
 export interface Species {
   key: SpeciesKey;
@@ -31,24 +31,29 @@ export interface Species {
   friction: number;
   /** 内部振動の減衰 */
   damping: number;
+  /** 出現しやすさ */
   weight: number;
+  /** 1匹ごとの太さの幅（b に掛ける倍率） */
+  girth: [number, number];
 }
 
 const base = {
   headN: 10,
   mass: 1,
-  shapeStiff: 0.13,
-  beta: 0.5,
-  stretchMax: 1.7,
-  edgeCompliance: 4e-6,
+  // 胴体は柔らかめ: 形に戻る力は弱く、面積を保ったまま大きく潰れ・伸びる
+  shapeStiff: 0.055,
+  beta: 0.45,
+  stretchMax: 1.75,
+  edgeCompliance: 1.2e-5,
   areaCompliance: 2e-4,
-  relaxMin: 0.4,
+  relaxMin: 0.25,
   tailSegs: 7,
   tailWidth: 1,
   fluff: 0,
   friction: 0.25,
   damping: 3.2,
   weight: 1,
+  girth: [0.75, 1.05] as [number, number],
 };
 
 export const SPECIES: Record<SpeciesKey, Species> = {
@@ -61,7 +66,22 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     headR: 27,
     ringN: 18,
     tailLen: 74,
-    weight: 4,
+    weight: 3,
+    girth: [0.68, 1.1],
+  },
+  slim: {
+    ...base,
+    key: 'slim',
+    name: 'ほそい猫',
+    a: 62,
+    b: 26,
+    headR: 25,
+    ringN: 20,
+    mass: 0.8,
+    tailLen: 78,
+    tailWidth: 0.85,
+    weight: 3,
+    girth: [0.85, 1.1],
   },
   long: {
     ...base,
@@ -71,13 +91,14 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     b: 30,
     headR: 26,
     ringN: 24,
-    shapeStiff: 0.075,
-    beta: 0.65,
-    stretchMax: 2.3,
-    edgeCompliance: 4e-5,
-    relaxMin: 0.35,
+    shapeStiff: 0.035,
+    beta: 0.55,
+    stretchMax: 2.2,
+    edgeCompliance: 5e-5,
+    relaxMin: 0.22,
     tailLen: 84,
-    weight: 1.6,
+    weight: 2,
+    girth: [0.75, 1.1],
   },
   round: {
     ...base,
@@ -88,12 +109,13 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     headR: 29,
     ringN: 20,
     mass: 1.9,
-    shapeStiff: 0.15,
+    shapeStiff: 0.07,
     beta: 0.45,
     tailLen: 62,
     tailWidth: 1.15,
     damping: 3.8,
-    weight: 1.6,
+    weight: 0.5,
+    girth: [0.85, 1.05],
   },
   kitten: {
     ...base,
@@ -105,11 +127,12 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     ringN: 14,
     headN: 9,
     mass: 0.45,
-    shapeStiff: 0.16,
+    shapeStiff: 0.08,
     tailLen: 44,
     tailSegs: 6,
     tailWidth: 0.85,
     weight: 1.8,
+    girth: [0.8, 1.1],
   },
   fluffy: {
     ...base,
@@ -120,15 +143,32 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     headR: 30,
     ringN: 22,
     mass: 0.8,
-    shapeStiff: 0.1,
+    shapeStiff: 0.045,
     areaCompliance: 0.012,
-    relaxMin: 0.4,
+    relaxMin: 0.25,
     tailLen: 78,
     tailWidth: 1.5,
     fluff: 1,
-    weight: 1.4,
+    weight: 0.6,
+    girth: [0.8, 1.05],
   },
 };
+
+/**
+ * 1匹ごとに太さを変えた体型を作る。細めに偏らせる（太い猫ばかりにならない）。
+ * t を省略するとランダム。
+ */
+export function withGirth(sp: Species, t = Math.pow(Math.random(), 1.5)): Species {
+  const [lo, hi] = sp.girth;
+  const g = lo + (hi - lo) * t;
+  return {
+    ...sp,
+    b: sp.b * g,
+    mass: sp.mass * g,
+    headR: sp.headR * (0.9 + 0.1 * g),
+    tailWidth: sp.tailWidth * (0.75 + 0.25 * g),
+  };
+}
 
 /** 毛色 */
 export interface Coat {

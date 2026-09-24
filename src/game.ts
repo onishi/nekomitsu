@@ -1,7 +1,7 @@
 /** ゲーム進行: ステージ・猫の投下・充填率・クリア演出 */
 import { Sound } from './audio';
 import { Cat, type CatEnv, type CatEvent } from './cat/cat';
-import { COATS, SPECIES, type Coat, type Species, type SpeciesKey } from './cat/catTypes';
+import { COATS, SPECIES, withGirth, type Coat, type Species, type SpeciesKey } from './cat/catTypes';
 import { Bowl } from './physics/bowl';
 import { World } from './physics/world';
 
@@ -13,11 +13,11 @@ interface StageDef {
 }
 
 const STAGES: StageDef[] = [
-  { R: 215, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 245, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 270, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 295, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
-  { R: 315, kinds: ['standard', 'kitten', 'long', 'round', 'fluffy'] },
+  { R: 215, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
+  { R: 245, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
+  { R: 270, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
+  { R: 295, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
+  { R: 315, kinds: ['standard', 'slim', 'kitten', 'long', 'round', 'fluffy'] },
 ];
 
 /** URL の ?cat=long などで体型を固定できる（動作確認用） */
@@ -146,7 +146,7 @@ export class Game {
   }
 
   private spawnHeld(): void {
-    const sp = this.pickSpecies();
+    const sp = withGirth(this.pickSpecies());
     const coat = this.pickCoat();
     const facing: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
     this.dropX = this.clampX(this.targetX, sp);

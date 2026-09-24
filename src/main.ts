@@ -142,24 +142,8 @@ game.onClear = () => {
 };
 game.onFirstDrop = () => hint.classList.add('fade');
 
-// --- 擬音・ハート ---
+// --- クリア時のハート ---
 const fx = new Effects();
-let lastText = -1;
-game.onCatEvent = (kind, cat, strength) => {
-  const sp = cat.species;
-  const t = game.time;
-  // 文字が重ならないように間引く（着地の「ぽすっ」を優先）
-  if (kind !== 'posu' && t - lastText < 0.7) return;
-  lastText = t;
-  const side = Math.random() < 0.5 ? -1 : 1;
-  if (kind === 'posu') {
-    fx.text('ぽすっ', cat.cx + side * sp.a * 0.9, cat.body.maxY - sp.b * 0.5, 13 + strength * 7);
-  } else if (kind === 'munyu') {
-    fx.text('むにゅ', cat.cx + side * sp.a * 0.6, cat.cy - sp.b * 0.9, 15, '#c9786a');
-  } else {
-    fx.text('すぽっ', cat.cx, cat.cy - sp.b, 16, '#7a8fb5');
-  }
-};
 let heartTimer = 0;
 function updateEffects(dt: number): void {
   fx.update(dt);
@@ -171,9 +155,6 @@ function updateEffects(dt: number): void {
       const h = c.headFrame();
       fx.heart(h.x + (Math.random() - 0.5) * 20, h.y - c.species.headR * 1.2, 11 + Math.random() * 8);
     }
-  }
-  if (game.phase === 'cleared' && game.time - game.clearTime < 0.02) {
-    fx.text('むにゅ〜っ', 0, game.bowl.R * 0.1, 34, '#d9785a');
   }
 }
 
@@ -247,11 +228,6 @@ function render(): void {
     ctx.stroke();
     ctx.restore();
     drawCat(ctx, h, game.time);
-    ctx.fillStyle = 'rgba(90,65,50,0.7)';
-    ctx.font = `600 ${Math.max(11, 13 / view.scale)}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`${h.coat.name}・${h.species.name}`, game.dropX, h.cy + h.species.b * 2.2 + 12 / view.scale);
-    ctx.textAlign = 'start';
   }
   // HUD
   stageNum.textContent = String(game.stage);
