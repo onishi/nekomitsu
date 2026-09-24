@@ -32,6 +32,8 @@ export type CatEvent = 'posu' | 'munyu' | 'supo' | 'lick';
 
 export interface CatEnv {
   time: number;
+  /** 容器の口の高さ（細くして落とした猫は、ここを通り抜けてから元の体型に戻る） */
+  rimY: number;
   /** 金魚鉢の中の猫（舐める相手を探す） */
   cats: readonly Cat[];
   event(kind: CatEvent, cat: Cat, strength: number): void;
@@ -146,6 +148,9 @@ export class Cat {
 
   /** 少し不機嫌な猫（出現率は低め）。ジト目で、触られるとイカ耳になり、他の猫を舐めない */
   readonly grumpy: boolean;
+  /** 吊るした姿勢での、中心からの左端・右端（左端は負） */
+  readonly extentL: number;
+  readonly extentR: number;
   /** 耳を倒す度合い 0..1（イカ耳） */
   earFlat = 0;
 
@@ -377,6 +382,21 @@ export class Cat {
     world.addPoly(body, this.ring, this.ringR);
     world.addPoly(body, this.head, headR);
 
+    // 体型を細くする（restSx）ときの基準の rest 形状
+    const copy = (c: ShapeCluster) => ({ x: Float64Array.from(c.restX), y: Float64Array.from(c.restY) });
+    this.baseRest = [copy(this.bodyCluster), copy(this.frontCluster), copy(this.rearCluster)];
+
+    // 吊るした姿勢（足ぶらーん・尻尾ピン）での左右の広がり（粒子の半径込み）
+    let el = Infinity;
+    let er = -Infinity;
+    for (let i = body.start; i < body.start + body.count; i++) {
+      const l = this.restLocal[i - body.start];
+      el = Math.min(el, l.x - world.r[i]);
+      er = Math.max(er, l.x + world.r[i]);
+    }
+    this.extentL = el;
+    this.extentR = er;
+
     this.installHooks();
     world.setKinematic(body, true);
   }
@@ -417,13 +437,17 @@ export class Cat {
   }
 
   /** 吊るされている間: rest 形状を指定位置・角度に配置 */
-  placeHeld(x: number, y: number, angle: number): void {
+  /**
+   * 吊るされている間: rest 形状を指定位置・角度に配置。
+   * sx < 1 なら、細い口に合わせて体を横に細く（そのぶん少し縦長に）する。顔は潰さない。
+   */
+  placeHeld(x: number, y: number, angle: number, sx = 1): void {
     const w = this.world;
     const cs = Math.cos(angle);
     const sn = Math.sin(angle);
+    const sy = 1 / Math.sqrt(sx);
     this.updatePoseRest();
     const cl = this.bodyCluster;
-    // 胴体クラスタの rest を使う（足・尻尾のポーズ込み）
     const set = (i: number, lx: number, ly: number) => {
       const nx = x + cs * lx - sn * ly;
       const ny = y + sn * lx + cs * ly;
@@ -434,18 +458,47 @@ export class Cat {
       w.vx[i] = 0;
       w.vy[i] = 0;
     };
-    for (let k = 0; k < cl.idx.length; k++) set(cl.idx[k], cl.restX[k], cl.restY[k]);
+    // 胴体クラスタの rest を使う（足・尻尾のポーズ込み）
+    for (let k = 0; k < cl.idx.length; k++) set(cl.idx[k], cl.restX[k] * sx, cl.restY[k] * sy);
+    // 頭は形を保ったまま、頭の中心だけ移す
+    const h = this.restLocal[this.headC - this.body.start];
     for (const i of this.head) {
       const l = this.restLocal[i - this.body.start];
-      set(i, l.x, l.y);
+      set(i, h.x * sx + (l.x - h.x), h.y * sy + (l.y - h.y));
     }
+    this.heldSqueeze = sx;
     this.cx = x;
     this.cy = y;
     w.updateAabbs();
   }
+  heldSqueeze = 1;
+  /**
+   * 本来の形（rest）の横幅の倍率。細い口に合わせて細くして落とした猫は 1 未満で始まり、
+   * 口を通り抜けてから（着地してから）ゆっくり 1 に戻る
+   */
+  private restSx = 1;
+  private appliedSx = 1;
+  private baseRest: { x: Float64Array; y: Float64Array }[] = [];
+
+  /** 吊るした姿勢を横に sx 倍したときの左右の広がり（粒子の半径込み） */
+  extentsAt(sx: number): [number, number] {
+    const w = this.world;
+    const h = this.restLocal[this.headC - this.body.start];
+    let el = Infinity;
+    let er = -Infinity;
+    for (let i = this.body.start; i < this.body.start + this.body.count; i++) {
+      const l = this.restLocal[i - this.body.start];
+      const x = this.head.includes(i) ? h.x * sx + (l.x - h.x) : l.x * sx;
+      el = Math.min(el, x - w.r[i]);
+      er = Math.max(er, x + w.r[i]);
+    }
+    return [el, er];
+  }
 
   release(vx: number, vy: number): void {
     this.held = false;
+    // 吊るしていたときの細さのまま落とす（落とした瞬間に形が跳ねないように）
+    this.restSx = this.heldSqueeze;
     this.world.setKinematic(this.body, false);
     const w = this.world;
     for (let i = this.body.start; i < this.body.start + this.body.count; i++) {
@@ -454,9 +507,52 @@ export class Cat {
     }
   }
 
+  /** 距離制約（輪郭・首・尻尾）の本来の長さも、細くした体型に合わせる */
+  private scaleDistanceRest(sx: number, sy: number): void {
+    const b = this.body;
+    if (!this.dRestBase) this.dRestBase = b.dRest.slice();
+    const h = this.restLocal[this.headC - b.start];
+    const pos = (i: number) => {
+      const l = this.restLocal[i - b.start];
+      return this.head.includes(i) ? { x: h.x * sx + (l.x - h.x), y: h.y * sy + (l.y - h.y) } : { x: l.x * sx, y: l.y * sy };
+    };
+    for (let k = 0; k < b.dA.length; k++) {
+      const i = b.dA[k];
+      const j = b.dB[k];
+      const li = this.restLocal[i - b.start];
+      const lj = this.restLocal[j - b.start];
+      const d0 = Math.hypot(li.x - lj.x, li.y - lj.y);
+      const p = pos(i);
+      const q = pos(j);
+      const d1 = Math.hypot(p.x - q.x, p.y - q.y);
+      b.dRest[k] = d0 > 1e-6 ? this.dRestBase[k] * (d1 / d0) : this.dRestBase[k];
+    }
+  }
+  private dRestBase: number[] | null = null;
+
   private updatePoseRest(): void {
     const cl = this.bodyCluster;
     const lp = this.legPose;
+    const sx = this.restSx;
+    const sy = 1 / Math.sqrt(sx);
+    // 胴体クラスタの rest（足・尻尾以外）と、前後の半身クラスタを細さに合わせる
+    const b0 = this.baseRest[0];
+    for (let k = 0; k < cl.idx.length; k++) {
+      cl.restX[k] = b0.x[k] * sx;
+      cl.restY[k] = b0.y[k] * sy;
+    }
+    if (this.appliedSx !== sx) {
+      this.appliedSx = sx;
+      this.scaleDistanceRest(sx, sy);
+      [this.frontCluster, this.rearCluster].forEach((c, n) => {
+        const b = this.baseRest[n + 1];
+        for (let k = 0; k < c.idx.length; k++) {
+          c.restX[k] = b.x[k] * sx;
+          c.restY[k] = b.y[k] * sy;
+        }
+        c.recompute();
+      });
+    }
     for (let k = 0; k < 2; k++) {
       const s = this.footSlots[k];
       cl.restX[s] = this.footTuck[k].x + (this.footDangle[k].x - this.footTuck[k].x) * lp;
@@ -478,6 +574,12 @@ export class Cat {
       const kk = clamp(tp * 1.6 - (k / this.tailSlots.length) * 0.6, 0, 1);
       cl.restX[s] = this.tailUp[k].x + (this.tailTuck[k].x - this.tailUp[k].x) * kk;
       cl.restY[s] = this.tailUp[k].y + (this.tailTuck[k].y - this.tailUp[k].y) * kk;
+    }
+    if (sx !== 1) {
+      for (const s of [...this.footSlots, ...this.tailSlots]) {
+        cl.restX[s] *= sx;
+        cl.restY[s] *= sy;
+      }
     }
     cl.recompute();
   }
@@ -616,6 +718,10 @@ export class Cat {
     // ポーズ
     const legTarget = this.landed ? 0 : 1;
     this.legPose += (legTarget - this.legPose) * Math.min(1, dt * (this.landed ? 10 : 6));
+    // 細くして落とした猫: 口を通り抜けたら（着地したら）ゆっくり本来の体型へ
+    if (this.restSx < 1 && (this.landed || this.cy > env.rimY + this.species.b)) {
+      this.restSx = Math.min(1, this.restSx + dt * 1.2);
+    }
     // 着地したら足はふにゃっと（足がバネになって跳ねないように）
     for (const s of this.footSlots) this.bodyCluster.stiff[s] = this.landed ? 0.1 : 0.35;
     this.bodyCluster.stiff[this.footSlots[0]] += 0.35 * this.groomPose;
@@ -657,7 +763,7 @@ export class Cat {
     // --- 呼吸・クリア時のむにゅっ ---
     const sleeping = this.expression === 'sleep' || this.expression === 'happy';
     const breath = sleeping ? 0.02 * Math.sin(env.time * 2.3 + this.phase) : 0;
-    this.bodyArea.scale = (1 + breath) * (1 - 0.05 * env.squeeze);
+    this.bodyArea.scale = (1 + breath) * (1 - 0.05 * env.squeeze) * Math.sqrt(this.restSx);
 
     this.updateAction(dt, env);
 

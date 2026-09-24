@@ -61,6 +61,8 @@ export class Game {
   private spawnTimer = 0;
   /** 吊るされた猫の登場アニメ 0..1 */
   private heldIntro = 1;
+  /** 吊るしている猫を口の幅に合わせて細くする倍率 */
+  private squeeze0 = 1;
   fill = 0;
   private fillTimer = 0;
   phase: Phase = 'playing';
@@ -91,6 +93,9 @@ export class Game {
       time: 0,
       get cats() {
         return game.cats;
+      },
+      get rimY() {
+        return game.bowl.openY;
       },
       squeeze: 0,
       cleared: false,
@@ -182,17 +187,45 @@ export class Game {
     const facing: 1 | -1 = carry ? carry.facing : Math.random() < 0.5 ? 1 : -1;
     // 少し不機嫌な猫はたまに（約12%）
     const grumpy = carry ? carry.grumpy : forcedGrumpy ?? Math.random() < 0.12;
-    this.dropX = this.clampX(this.targetX, sp);
-    const c = new Cat(this.world, sp, coat, facing, this.dropX, this.dropY, grumpy);
+    const c = new Cat(this.world, sp, coat, facing, 0, this.dropY, grumpy);
+    this.dropX = this.clampX(this.targetX, c);
     this.held = c;
     this.heldIntro = 0;
-    c.placeHeld(this.dropX, this.dropY - 200, 0);
+    this.squeeze0 = this.heldSqueeze(c);
+    c.placeHeld(this.dropX, this.dropY - 200, 0, this.squeeze0);
   }
 
-  clampX(x: number, sp: Species): number {
-    // 口が猫より狭い容器（フラスコなど）では中央から落とす
-    const lim = Math.max(0, this.bowl.openHalfW - sp.a * 0.95 - 6);
-    return Math.max(-lim, Math.min(lim, x));
+  /**
+   * 吊るす位置の左右の範囲。頭・尻尾・足まで含めた猫全体が口の幅（見えない壁）に収まるようにする。
+   */
+  clampX(x: number, c: Cat): number {
+    const w = this.bowl.openHalfW - 4;
+    const [el, er] = c.extentsAt(this.heldSqueeze(c));
+    const lo = -w - el;
+    const hi = w - er;
+    if (lo > hi) return -(el + er) / 2;
+    return Math.max(lo, Math.min(hi, x));
+  }
+
+  /**
+   * 口が猫より狭い容器（フラスコ・管など）では、吊るしている間に猫を口の幅まで細くしておく。
+   * 落とした瞬間に壁の外へはみ出た部分がパチンと戻るのを防ぐ（猫は液体）。
+   */
+  heldSqueeze(c: Cat): number {
+    const avail = (this.bowl.openHalfW - 4) * 2;
+    const width = (sx: number) => {
+      const [l, r] = c.extentsAt(sx);
+      return r - l;
+    };
+    if (width(1) <= avail) return 1;
+    let lo = 0.35;
+    let hi = 1;
+    for (let k = 0; k < 8; k++) {
+      const m = (lo + hi) / 2;
+      if (width(m) <= avail) lo = m;
+      else hi = m;
+    }
+    return lo;
   }
 
   get canDrop(): boolean {
@@ -282,8 +315,8 @@ export class Game {
     if (!this.canDrop || !this.held) return;
     const c = this.held;
     if (snap) {
-      this.dropX = this.clampX(this.targetX, c.species);
-      c.placeHeld(this.dropX, c.cy, c.heldAngle);
+      this.dropX = this.clampX(this.targetX, c);
+      c.placeHeld(this.dropX, c.cy, c.heldAngle, c.heldSqueeze);
     }
     c.release(this.dropVX * 0.3, 60);
     this.cats.push(c);
@@ -309,7 +342,7 @@ export class Game {
     if (this.held) {
       const c = this.held;
       const prev = this.dropX;
-      const tx = this.clampX(this.targetX, c.species);
+      const tx = this.clampX(this.targetX, c);
       this.dropX += (tx - this.dropX) * Math.min(1, dt * 12);
       this.dropVX = (this.dropX - prev) / dt;
       this.heldIntro = Math.min(1, this.heldIntro + dt * 3.2);
@@ -319,7 +352,7 @@ export class Game {
       const sway = Math.sin(this.time * 2.1) * 0.05;
       const ang = Math.max(-0.4, Math.min(0.4, -this.dropVX * 0.0007)) + sway;
       c.heldAngle = ang;
-      c.placeHeld(this.dropX, y, ang);
+      c.placeHeld(this.dropX, y, ang, this.squeeze0);
     }
 
     // 猫のふるまい

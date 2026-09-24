@@ -256,6 +256,18 @@ export class Container {
     }
     out.x = qx + nx * r;
     out.y = qy + ny * r;
+    // 口より上の見えない壁では、はみ出た分を一度に戻さず少しずつ押し戻す
+    // （細い口に猫を落としたとき、頭や尻尾がパチンと跳ねないように）
+    if (y < this.openY) {
+      const dx = out.x - x;
+      const dy = out.y - y;
+      const d2 = Math.hypot(dx, dy);
+      const maxStep = 2.5;
+      if (d2 > maxStep) {
+        out.x = x + (dx / d2) * maxStep;
+        out.y = y + (dy / d2) * maxStep;
+      }
+    }
     out.nx = nx;
     out.ny = ny;
     out.hit = true;
