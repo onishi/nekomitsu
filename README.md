@@ -23,7 +23,12 @@ npm install
 npm run dev        # 開発サーバ http://localhost:5173/
 npm run build      # 型チェック + dist/ へビルド（相対パスなのでどこにでも置ける）
 npm run sim        # 物理だけをヘッドレスで回して、安定性・充填率・処理時間を表示
+npm run deploy     # ビルドして Cloudflare Workers（静的アセット）へデプロイ
 ```
+
+公開URL: https://nekomitsu.wagaya.workers.dev
+
+デプロイには `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID`（または `wrangler login`）が必要です。設定は `wrangler.jsonc`。
 
 動作確認用の URL パラメータ:
 
