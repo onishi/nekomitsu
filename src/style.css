@@ -192,16 +192,6 @@ body {
   opacity: 0.75;
 }
 
-#menu .mode .best {
-  font-size: 12px;
-  color: #d9774a;
-  font-weight: 700;
-}
-
-#menu .mode .best:empty {
-  display: none;
-}
-
 #menu .note {
   margin: 10px 0 10px;
   font-size: 12px;
@@ -342,6 +332,38 @@ button.icon:active {
   max-width: calc(100vw - 32px);
   text-align: center;
   line-height: 1.5;
+}
+
+/* ねこけしのハイスコア: 操作ヒントが消えたあと、同じ画面下の位置に控えめに出す */
+#best {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#best.show {
+  opacity: 0.85;
+  transition: opacity 0.6s ease 1.8s;
+}
+
+#best b {
+  font-size: 14px;
+  margin-left: 4px;
+}
+
+/* 今のスコアがハイスコアを超えている */
+#best.new b {
+  color: #d9774a;
 }
 
 #hint span {

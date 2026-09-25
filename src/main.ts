@@ -13,6 +13,8 @@ const hudLabel = $('hudLabel');
 const titleBtn = $<HTMLButtonElement>('titleBtn');
 const overEl = $('over');
 const hint = $('hint');
+const bestBox = $('best');
+const bestNum = $('bestNum');
 const clearEl = $('clear');
 const soundBtn = $<HTMLButtonElement>('soundBtn');
 const nextBtn = $<HTMLButtonElement>('nextBtn');
@@ -270,8 +272,6 @@ function showMenu(closable: boolean): void {
   $('menuNote').hidden = !closable;
   const current: GameMode = closable ? game.mode : readStore(MODE_KEY) === 'keshi' ? 'keshi' : 'mitsu';
   for (const b of menu.querySelectorAll<HTMLButtonElement>('.mode')) b.classList.toggle('current', b.dataset.mode === current);
-  const best = Number(readStore('nekomitsu.keshi.best') ?? 0) || 0;
-  $('menuBest').textContent = best > 0 ? `ハイスコア ${best.toLocaleString()}` : '';
   paused = true;
   keys.clear();
   menu.showModal();
@@ -506,6 +506,12 @@ function render(): void {
   }
   // HUD
   stageNum.textContent = k ? k.score.toLocaleString() : String(game.stage);
+  // ねこけしのハイスコア（画面下。操作ヒントが消えてから出す。更新中は色を変える）
+  const bestVal = k ? k.best : 0;
+  bestBox.classList.toggle('show', !!k && bestVal > 0 && hint.classList.contains('fade'));
+  bestBox.classList.toggle('new', !!k && k.newBest);
+  const bestText = bestVal.toLocaleString();
+  if (bestNum.textContent !== bestText) bestNum.textContent = bestText;
 }
 
 /** ねこけしの上限ライン。超えている間は赤く点滅し、残り時間のゲージが縮んでいく */
