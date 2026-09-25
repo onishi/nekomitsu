@@ -67,7 +67,7 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     ringN: 18,
     tailLen: 74,
     weight: 3,
-    girth: [0.68, 1.1],
+    girth: [0.68, 1.0],
   },
   slim: {
     ...base,
@@ -114,7 +114,8 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     tailLen: 62,
     tailWidth: 1.15,
     damping: 3.8,
-    weight: 0.5,
+    // 太い猫はレア
+    weight: 0.12,
     girth: [0.85, 1.05],
   },
   kitten: {
@@ -122,7 +123,7 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     key: 'kitten',
     name: '子猫',
     a: 36,
-    b: 24,
+    b: 21,
     headR: 22,
     ringN: 14,
     headN: 9,
@@ -132,7 +133,7 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     tailSegs: 6,
     tailWidth: 0.85,
     weight: 1.8,
-    girth: [0.8, 1.1],
+    girth: [0.8, 1.05],
   },
   fluffy: {
     ...base,
@@ -149,7 +150,7 @@ export const SPECIES: Record<SpeciesKey, Species> = {
     tailLen: 78,
     tailWidth: 1.5,
     fluff: 1,
-    weight: 0.6,
+    weight: 0.3,
     girth: [0.8, 1.05],
   },
 };
@@ -158,7 +159,7 @@ export const SPECIES: Record<SpeciesKey, Species> = {
  * 1匹ごとに太さを変えた体型を作る。細めに偏らせる（太い猫ばかりにならない）。
  * t を省略するとランダム。
  */
-export function withGirth(sp: Species, t = Math.pow(Math.random(), 1.5)): Species {
+export function withGirth(sp: Species, t = Math.pow(Math.random(), 2.2)): Species {
   const [lo, hi] = sp.girth;
   const g = lo + (hi - lo) * t;
   return {

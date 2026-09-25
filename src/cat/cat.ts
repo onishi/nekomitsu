@@ -210,6 +210,22 @@ export class Cat {
       const py = b * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
       ringPts.push({ x: px, y: py });
     }
+    // 楕円に近い輪郭を猫らしく: 首の方は細く、腰（お尻）は高く、後ろ脚の前のお腹は少しくびれる。
+    // 形を整えても面積（= 猫の量）は変えない
+    {
+      const area = (p: { x: number; y: number }[]) => {
+        let A = 0;
+        for (let k = 0; k < p.length; k++) {
+          const q = p[(k + 1) % p.length];
+          A += p[k].x * q.y - q.x * p[k].y;
+        }
+        return Math.abs(A / 2);
+      };
+      const A0 = area(ringPts);
+      for (const p of ringPts) p.y *= bodyProfile(p.x / a, p.y > 0, b / a);
+      const k = A0 / area(ringPts);
+      for (const p of ringPts) p.y *= k;
+    }
     let per = 0;
     for (let k = 0; k < N; k++) {
       const p = ringPts[k];
@@ -1072,4 +1088,20 @@ export class Cat {
     this.legSwing = Math.max(-1, Math.min(1, th + this.legSwingV * dt));
     this.hang += ((this.held ? 1 : 0) - this.hang) * Math.min(1, dt * (this.held ? 20 : 7));
   }
+}
+
+/**
+ * 胴体の高さの倍率（u: -1 = お尻 … +1 = 首の側、belly: お腹側か、aspect: b / a）。
+ * 背中: お尻（腰）が高く、首へ向かってなだらかに低く・細くなる。
+ * お腹: 太もものところは深く、その前でくびれる（縦長の猫ほど控えめ）。胸から首の下へ細くなる。
+ */
+function bodyProfile(u: number, belly: boolean, aspect: number): number {
+  const bump = (h: number, c: number, w: number) => h * Math.exp(-(((u - c) / w) ** 2));
+  const ss = (h: number, e0: number, e1: number) => {
+    const t = Math.max(0, Math.min(1, (u - e0) / (e1 - e0)));
+    return h * t * t * (3 - 2 * t);
+  };
+  if (!belly) return 1 + bump(0.14, -0.5, 0.35) + ss(-0.38, -0.15, 0.85);
+  const tuck = Math.min(1, 0.55 / aspect);
+  return 1 + bump(0.08, -0.62, 0.25) + bump(-0.26 * tuck, -0.15, 0.25) + bump(0.04, 0.4, 0.3) + ss(-0.18, 0.5, 1);
 }
