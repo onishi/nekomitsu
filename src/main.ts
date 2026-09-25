@@ -558,6 +558,7 @@ showMenu(false);
 
 // デバッグ・自動テスト用（__hold(true) でゲームの時間を止め、テストから1フレームずつ進められる）
 (window as unknown as { __game: Game }).__game = game;
+(window as unknown as { __view: View }).__view = view;
 (window as unknown as { __hold: (v: boolean) => void }).__hold = (v) => {
   testHold = v;
 };

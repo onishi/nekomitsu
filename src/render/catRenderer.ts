@@ -362,6 +362,7 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
   const groom = cat.groomPose;
   const roots: Pt[] = [];
   const bellies: Pt[] = [];
+  const bots: Pt[] = [];
   for (let k = 0; k < 2; k++) {
     const [kt, kb] = cat.legAnchor[k];
     const top = ring[kt];
@@ -370,6 +371,7 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
     const dy = bot.y - top.y;
     const l = Math.hypot(dx, dy) || 1;
     bellies.push({ x: dx / l, y: dy / l });
+    bots.push(bot);
     roots.push(lerp(top, bot, k === 0 ? 0.6 : 0.56));
   }
   // 体の軸（頭 → お尻）
@@ -378,6 +380,16 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
   const axL = Math.hypot(axX, axY) || 1;
   axX /= axL;
   axY /= axL;
+  // お腹の向きは体の軸に垂直にそろえる（輪郭点どうしを結ぶと、胴体が伸び縮みしたとき大きく傾く）
+  for (let k = 0; k < 2; k++) {
+    let nx = -axY;
+    let ny = axX;
+    if (nx * bellies[k].x + ny * bellies[k].y < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    bellies[k] = { x: nx, y: ny };
+  }
 
   ctx.save();
   if (far) ctx.globalAlpha = Math.min(1, lp * 1.5);
@@ -409,6 +421,35 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
       const m = rest * 0.7 * (1 - gw0(front, groom));
       paw = { x: paw.x + (tx - paw.x) * m, y: paw.y + (ty - paw.y) * m };
     }
+    // のびー: 前脚は前へまっすぐ伸ばし、後ろ脚は少し後ろへ踏ん張る
+    const st = cat.stretchPose;
+    if (st > 0.001) {
+      // 手先はお腹の輪郭の線（前後のお腹の点を結ぶ線。寝そべっていれば床と平行）に沿って置く。
+      // 前脚は頭の前端より少し先、後ろ脚は少し後ろ。高さは手の大きさぶんだけ線より上
+      let ux = bots[0].x - bots[1].x;
+      let uy = bots[0].y - bots[1].y;
+      const ul = Math.hypot(ux, uy) || 1;
+      ux /= ul;
+      uy /= ul;
+      let nx = -uy;
+      let ny = ux;
+      if (nx * bell.x + ny * bell.y < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      const base = bots[k];
+      let along: number;
+      if (front) {
+        const hf = cat.headFrame();
+        along = (hf.x - base.x) * ux + (hf.y - base.y) * uy + cat.headRX * 1.2;
+      } else {
+        along = -b * 0.35;
+      }
+      const lift = b * 0.14;
+      const tx = base.x + ux * along - nx * lift;
+      const ty = base.y + uy * along - ny * lift;
+      paw = { x: paw.x + (tx - paw.x) * st, y: paw.y + (ty - paw.y) * st };
+    }
     // 手は胴体のお腹側だけ（転がって背中側へ回った粒子は、付け根の高さまで戻す）
     const gw = gw0(front, groom);
     if (gw > 0 && !far) {
@@ -425,14 +466,15 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
     const u = (paw.x - root.x) * bell.x + (paw.y - root.y) * bell.y;
     const uMin = b * 0.1;
     if (u < uMin) {
-      paw.x += bell.x * (uMin - u) * (1 - gw);
-      paw.y += bell.y * (uMin - u) * (1 - gw);
+      const keep = (1 - gw) * (1 - cat.stretchPose);
+      paw.x += bell.x * (uMin - u) * keep;
+      paw.y += bell.y * (uMin - u) * keep;
     }
     // 伸びすぎない（液体なので少しは伸びる）
     let dx = paw.x - root.x;
     let dy = paw.y - root.y;
     let d = Math.hypot(dx, dy) || 1;
-    const maxD = (L1 + L2) * 1.3;
+    const maxD = (L1 + L2) * (1.3 + 1.2 * cat.stretchPose);
     if (d > maxD) {
       paw = { x: root.x + (dx / d) * maxD, y: root.y + (dy / d) * maxD };
       dx = paw.x - root.x;
@@ -596,6 +638,21 @@ function drawTail(ctx: CanvasRenderingContext2D, cat: Cat): void {
   pts.push(lerp({ x: w.x[base], y: w.y[base] }, { x: cat.cx, y: cat.cy }, 0.15));
   for (const i of cat.tail) pts.push({ x: w.x[i], y: w.y[i] });
   const n = pts.length;
+  // しっぽの揺れ（描画だけ）: 付け根から先へ波が伝わるように、節ごとに少しずつ曲げる。寝ていると先だけぴくっ
+  if (cat.wagAmp > 0.002 || cat.tailTwitch > 0.02) {
+    const orig = pts.map((p) => ({ x: p.x, y: p.y }));
+    let acc = 0;
+    for (let k = 1; k < n; k++) {
+      const t = k / (n - 1);
+      acc += cat.wagAmp * Math.sin(cat.wagPhase - k * 0.55) * t;
+      if (k >= n - 2) acc += cat.tailTwitch * 0.35 * Math.sin(cat.wagPhase * 9 + k);
+      const sx = orig[k].x - orig[k - 1].x;
+      const sy = orig[k].y - orig[k - 1].y;
+      const c = Math.cos(acc);
+      const sn = Math.sin(acc);
+      pts[k] = { x: pts[k - 1].x + sx * c - sy * sn, y: pts[k - 1].y + sx * sn + sy * c };
+    }
+  }
   const w0 = sp.b * 0.3 * sp.tailWidth;
   const left: Pt[] = [];
   const right: Pt[] = [];
@@ -819,7 +876,7 @@ function drawFace(
   const e = cat.expression;
   const dark = !!coat.dark;
   const lineCol = dark ? '#0d0b0a' : '#3a2a22';
-  const open = Math.max(0, Math.min(1.2, cat.eyeOpen * (1 - cat.blink)));
+  const open = Math.max(0, Math.min(1.2, cat.eyeOpen * (1 - cat.blink) * (1 - cat.slowBlink)));
   const eyeY = -0.04 * r;
   const eyeDX = 0.4 * r;
   const erx = 0.17 * r;
@@ -894,12 +951,28 @@ function drawFace(
       ctx.fill();
       ctx.save();
       ctx.clip();
-      // 瞳孔
-      const look = e === 'curious' ? ery * 0.35 : 0;
-      const pw = surprised ? wdt * 0.62 : e === 'sleepy' ? wdt * 0.45 : wdt * 0.36;
+      // 瞳孔: 大きさは気分で（驚くとまん丸、落ち着くと細い）、向きは目で追っているものへ
+      let ox = side * wdt * 0.05 + fx * 0.04;
+      let oy = e === 'curious' ? ery * 0.35 : 0;
+      if (cat.lookAmt > 0.01) {
+        const dx = cat.lookX - p.x;
+        const dy = cat.lookY - p.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const lx = (dx * Math.cos(angle) + dy * Math.sin(angle)) / d;
+        const ly = (-dx * Math.sin(angle) + dy * Math.cos(angle)) / d;
+        const m = Math.min(1, d / (r * 2.5)) * cat.lookAmt;
+        ox += lx * m * wdt * 0.42;
+        oy += ly * m * ery * 0.45;
+      }
       ctx.fillStyle = '#15100d';
       ctx.beginPath();
-      ctx.ellipse(side * wdt * 0.05 + fx * 0.04, look, pw, ery * 1.1, 0, 0, TAU);
+      if (e === 'blank') {
+        // 無表情: 小さな丸い黒目で、じっ…
+        ctx.arc(ox, oy, ery * 0.42, 0, TAU);
+      } else {
+        const pw = wdt * (0.24 + 0.45 * cat.pupil);
+        ctx.ellipse(ox, oy, pw, ery * 1.1, 0, 0, TAU);
+      }
       ctx.fill();
       // 上瞼の影
       ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -979,6 +1052,14 @@ function drawFace(
     ctx.ellipse(0, r * (0.14 + 0.26 * yo), r * 0.12, r * 0.1 * yo + r * 0.01, 0, 0, TAU);
     ctx.fill();
     ctx.restore();
+    ctx.stroke();
+  } else if (e === 'blank') {
+    // 無表情: 口はまっすぐ
+    ctx.beginPath();
+    ctx.moveTo(0, r * 0.06);
+    ctx.lineTo(0, r * 0.13);
+    ctx.moveTo(-r * 0.1, r * 0.15);
+    ctx.lineTo(r * 0.1, r * 0.15);
     ctx.stroke();
   } else if (e === 'grumpy' || e === 'annoyed') {
     // へ の字口

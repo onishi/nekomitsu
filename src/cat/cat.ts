@@ -23,10 +23,11 @@ export type Expression =
   | 'yawn' // あくび
   | 'happy' // クリア
   | 'grumpy' // 不機嫌な猫のふだんの顔（ジト目・へ の字口）
-  | 'annoyed'; // 不機嫌な猫が触られた・押された（イカ耳）
+  | 'annoyed' // 不機嫌な猫が触られた・押された（イカ耳）
+  | 'blank'; // 無表情（スン…）。動じない猫は押されてもこの顔
 
 /** 落ち着いた猫が自分からするアクション */
-export type CatAction = 'none' | 'groom' | 'lick' | 'yawn';
+export type CatAction = 'none' | 'groom' | 'lick' | 'yawn' | 'stretch';
 
 export type CatEvent = 'posu' | 'munyu' | 'supo' | 'lick';
 
@@ -46,6 +47,10 @@ export interface CatEnv {
     supo(): void;
     purr(): void;
   };
+  /** みんなが目で追うもの（落ちている猫・吊るされている猫の頭）。なければ null */
+  focus?: { x: number; y: number } | null;
+  /** focus が落ちている最中の猫か（動くものを見ると瞳が大きくなる） */
+  focusMoving?: boolean;
 }
 
 const TAU = Math.PI * 2;
@@ -596,7 +601,8 @@ export class Cat {
   private updatePoseRest(): void {
     const cl = this.bodyCluster;
     const lp = this.legPose;
-    const sx = this.restSx;
+    // のびーの間は胴体を少し長く（面積は保つ）
+    const sx = this.restSx * (1 + 0.2 * this.stretchPose);
     const sy = 1 / Math.sqrt(sx);
     // 胴体クラスタの rest（足・尻尾以外）と、前後の半身クラスタを細さに合わせる
     const b0 = this.baseRest[0];
@@ -676,6 +682,7 @@ export class Cat {
     sp /= N;
     this.cx = cx;
     this.cy = cy;
+    this.ringContact = ringHits / N;
     let headHits = 0;
     for (const i of this.head) if (w.contact[i] & CONTACT_CAT) headHits++;
     for (const i of this.feet) if (w.contact[i]) bowlHits++;
@@ -686,6 +693,7 @@ export class Cat {
       this.legPose = 1;
       this.tailPose = 0;
       this.animateEyes(dt);
+      this.updateLooks(dt, env);
       return;
     }
 
@@ -840,13 +848,14 @@ export class Cat {
     if (!this.landed) e = 'surprised';
     else if (env.cleared) e = 'happy';
     else if (this.impactTimer > 0) e = 'startled';
-    else if (this.pressTimer > 0 || squash > 1.9) e = 'squint';
+    else if (this.pressTimer > 0 || squash > 1.9) e = this.stoic ? 'blank' : 'squint';
     else if (this.action === 'yawn') e = 'yawn';
-    else if (this.action === 'groom' || this.action === 'lick') e = 'groom';
+    else if (this.action === 'groom' || this.action === 'lick' || this.action === 'stretch') e = 'groom';
     else if (this.licked > 0 || (this.headBuried > 0.6 && this.calm > 1.5)) e = 'bliss';
     else if (this.calm > this.sleepAt) e = 'sleep';
     else if (this.calm > this.sleepAt / 2) e = 'sleepy';
-    else e = 'normal';
+    else e = this.stoic || this.blankTimer > 0 ? 'blank' : 'normal';
+    this.blankTimer -= dt;
     if (this.grumpy && this.landed) {
       // 不機嫌な猫: 触られたり舐められたりするとイカ耳、ふだんはジト目。クリアしても機嫌は直らない
       if (e === 'squint' || this.licked > 0) e = 'annoyed';
@@ -863,6 +872,7 @@ export class Cat {
     this.blush += ((e === 'bliss' || e === 'happy' || this.action === 'lick' ? 1 : 0) - this.blush) * Math.min(1, dt * 2);
     if (this.grumpy) this.blush = 0;
     this.animateEyes(dt);
+    this.updateLooks(dt, env);
   }
 
   private animateEyes(dt: number): void {
@@ -916,16 +926,29 @@ export class Cat {
           if (Math.random() < 0.4) {
             this.calm = 3;
             this.actionCooldown = 0;
+            // 起きたら、のびー
+            if (Math.random() < 0.7 && this.canStretch()) {
+              this.startAction('stretch', 2.4, null);
+              this.actionCooldown = 2;
+            }
           }
         }
       } else if (this.calm > 1.5 && this.actionCooldown <= 0) {
         this.actionCooldown = 3 + Math.random() * 6;
-        const target = this.findLickTarget(env);
-        const r = Math.random();
-        // 不機嫌な猫は他の猫を舐めない
-        if (target && r < 0.45 && !this.grumpy) this.startAction('lick', 2.5 + Math.random() * 2, target);
-        else if (r < 0.8) this.startAction('groom', 2.5 + Math.random() * 2.5, null);
-        else this.startAction('yawn', 1.6, null);
+        const r0 = Math.random();
+        if (r0 < 0.1) {
+          // スン…（しばらく無表情）
+          this.blankTimer = 3 + Math.random() * 3;
+        } else if (r0 < 0.2 && this.canStretch()) {
+          this.startAction('stretch', 2.4, null);
+        } else {
+          const target = this.findLickTarget(env);
+          const r = Math.random();
+          // 不機嫌な猫は他の猫を舐めない
+          if (target && r < 0.45 && !this.grumpy) this.startAction('lick', 2.5 + Math.random() * 2, target);
+          else if (r < 0.8) this.startAction('groom', 2.5 + Math.random() * 2.5, null);
+          else this.startAction('yawn', 1.6, null);
+        }
       }
     }
 
@@ -935,6 +958,7 @@ export class Cat {
     let tongue = 0;
     let groom = 0;
     let yawn = 0;
+    let stretch = 0;
     this.headAim = null;
     if (this.action === 'groom') {
       // 頭を前足の方へ下げて、ペロペロ
@@ -966,7 +990,14 @@ export class Cat {
       const k = t / this.actionDur;
       yawn = Math.sin(Math.min(1, k * 1.15) * Math.PI);
       this.headAim = -0.25 * f * yawn;
+    } else if (this.action === 'stretch') {
+      // のびー: 前脚を前へ伸ばして、胴体をにゅーっと伸ばす。頭は少し前に下げる
+      const k = t / this.actionDur;
+      stretch = Math.sin(Math.min(1, k) * Math.PI) ** 0.6;
+      this.headAim = 0.16 * f * stretch;
     }
+    this.stretchPose += (stretch - this.stretchPose) * Math.min(1, dt * 5);
+    if (stretch === 0 && this.stretchPose < 1e-3) this.stretchPose = 0;
     this.tongue += (tongue - this.tongue) * Math.min(1, dt * 18);
     this.groomPose += (groom - this.groomPose) * Math.min(1, dt * 4);
     this.yawnOpen += (yawn - this.yawnOpen) * Math.min(1, dt * 10);
@@ -993,6 +1024,11 @@ export class Cat {
   }
   private lickSide = 0;
   private lickUp = 0;
+
+  /** のびーは周りが空いているときだけ（ぎゅうぎゅうの中で伸びると、まわりを押してしまう） */
+  private canStretch(): boolean {
+    return this.ringContact < 0.35;
+  }
 
   private startAction(a: CatAction, dur: number, target: Cat | null): void {
     this.lickSide = 0;
@@ -1063,6 +1099,120 @@ export class Cat {
     return { x: hx, y: hy, angle: this.held ? this.heldAngle : this.headCluster.angle };
   }
   heldAngle = 0;
+
+  /** 動じない性格（押されても潰されても無表情） */
+  stoic = false;
+  /** たまに「スン…」と無表情になる残り時間 */
+  private blankTimer = 0;
+  /** 描画用: 目で追っている点（ワールド座標）と、追っている度合い 0..1 */
+  lookX = 0;
+  lookY = 0;
+  lookAmt = 0;
+  private lookInterest = true;
+  private lookTimer = 0;
+  /** 描画用: 瞳の大きさ 0（細い）..1（まん丸） */
+  pupil = 0.3;
+  /** 描画用: ゆっくりまばたきで閉じている度合い 0..1 */
+  slowBlink = 0;
+  private slowBlinkT = 0;
+  private slowBlinkCooldown = 4 + Math.random() * 8;
+  /** 描画用: しっぽの揺れ（振れ幅・位相）と、寝ているときの先っぽのぴくっ */
+  wagAmp = 0;
+  wagPhase = Math.random() * 10;
+  private wagFreq = 1.5;
+  tailTwitch = 0;
+  private twitchTimer = 3 + Math.random() * 5;
+  /** のびー 0..1（前脚を前へ伸ばし、胴体がにゅーっと伸びる） */
+  stretchPose = 0;
+  /** 輪郭のうち他の猫に触れている割合（のびーは周りが空いているときだけ） */
+  private ringContact = 0;
+
+  /** 目・しっぽなど、表情が決まったあとの細かい動き（吊るされている間も） */
+  private updateLooks(dt: number, env: CatEnv): void {
+    const e = this.expression;
+    // --- 目で追う ---
+    this.lookTimer -= dt;
+    if (this.lookTimer <= 0) {
+      this.lookTimer = 1.5 + Math.random() * 4;
+      // いつも見ているわけではない
+      this.lookInterest = Math.random() < 0.75;
+    }
+    const f = env.focus;
+    const awake = e === 'normal' || e === 'grumpy' || e === 'blank' || e === 'sleepy' || e === 'annoyed';
+    const want = !!f && !this.held && this.landed && this.lookInterest && awake && this.slowBlink < 0.5;
+    if (f && want) {
+      if (this.lookAmt < 0.05) {
+        this.lookX = f.x;
+        this.lookY = f.y;
+      }
+      const k = Math.min(1, dt * 9);
+      this.lookX += (f.x - this.lookX) * k;
+      this.lookY += (f.y - this.lookY) * k;
+    }
+    this.lookAmt += ((want ? 1 : 0) - this.lookAmt) * Math.min(1, dt * 6);
+    // --- 瞳の大きさ: 驚くとまん丸、落ち着くと細く、動くものを見ていると大きく ---
+    let pt =
+      e === 'surprised' || e === 'startled'
+        ? 0.9
+        : e === 'curious'
+          ? 0.6
+          : e === 'grumpy' || e === 'annoyed'
+            ? 0.12
+            : e === 'blank'
+              ? 0.1
+              : e === 'sleepy'
+                ? 0.4
+                : 0.28;
+    if (env.focusMoving && e !== 'blank') pt = Math.max(pt, 0.28 + 0.4 * this.lookAmt);
+    this.pupil += (pt - this.pupil) * Math.min(1, dt * 5);
+    // --- ゆっくりまばたき（猫の「好き」のサイン） ---
+    const canBlink = e === 'normal' || e === 'curious' || e === 'sleepy';
+    if (this.slowBlinkT > 0) {
+      this.slowBlinkT += dt;
+      const t = this.slowBlinkT;
+      const ease = (x: number) => x * x * (3 - 2 * x);
+      this.slowBlink = t < 0.8 ? ease(t / 0.8) : t < 1.25 ? 1 : t < 2.2 ? 1 - ease((t - 1.25) / 0.95) : 0;
+      if (t >= 2.2 || !canBlink) {
+        this.slowBlinkT = 0;
+        this.slowBlink = 0;
+      }
+    } else {
+      this.slowBlinkCooldown -= dt;
+      if (this.slowBlinkCooldown <= 0) {
+        this.slowBlinkCooldown = 6 + Math.random() * 14;
+        if (canBlink && Math.random() < 0.4) this.slowBlinkT = 1e-4;
+      }
+    }
+    // --- しっぽ: ごきげんはゆったり、不機嫌はパタパタ、寝ていても先だけぴくっ ---
+    let amp = 0;
+    let freq = this.wagFreq;
+    if (this.held) {
+      amp = 0.05;
+      freq = 1.4;
+    } else if (!this.landed || e === 'sleep' || e === 'blank' || e === 'surprised' || e === 'startled') {
+      amp = 0;
+    } else if (e === 'grumpy' || e === 'annoyed') {
+      amp = 0.18;
+      freq = 7;
+    } else if (e === 'happy' || e === 'bliss') {
+      amp = 0.09;
+      freq = 2.2;
+    } else {
+      amp = 0.06;
+      freq = 1.5;
+    }
+    this.wagAmp += (amp - this.wagAmp) * Math.min(1, dt * 2);
+    this.wagFreq += (freq - this.wagFreq) * Math.min(1, dt * 2);
+    this.wagPhase += dt * this.wagFreq;
+    this.tailTwitch *= Math.exp(-dt * 2.5);
+    if (e === 'sleep') {
+      this.twitchTimer -= dt;
+      if (this.twitchTimer <= 0) {
+        this.twitchTimer = 3 + Math.random() * 7;
+        this.tailTwitch = 1;
+      }
+    }
+  }
 
   /** 描画用: 前脚・後ろ脚の付け根を挟む輪郭点（ring 配列の位置: [背中側, お腹側]） */
   readonly legAnchor: [number, number][];

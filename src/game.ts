@@ -42,6 +42,16 @@ const forcedSpecies = (() => {
   }
 })();
 
+/** URL の ?stoic=1 で全員を動じない猫（押されても無表情）に、?stoic=0 でなしに（動作確認用） */
+const forcedStoic = (() => {
+  try {
+    const v = new URLSearchParams(globalThis.location?.search ?? '').get('stoic');
+    return v === null ? null : v === '1';
+  } catch {
+    return null;
+  }
+})();
+
 /** URL の ?coat=ushi などで柄を固定できる（動作確認用。ねこみつのみ） */
 const forcedCoat = (() => {
   try {
@@ -209,7 +219,7 @@ export class Game {
     }
     // 表示していた猫は消さずに次へ持ち越す（必ず落とせる）
     const carry = this.held
-      ? { species: this.held.species, coat: this.held.coat, facing: this.held.facing, grumpy: this.held.grumpy }
+      ? { species: this.held.species, coat: this.held.coat, facing: this.held.facing, grumpy: this.held.grumpy, stoic: this.held.stoic }
       : null;
     this.stage = n;
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
@@ -268,13 +278,15 @@ export class Game {
     return COATS[0];
   }
 
-  private spawnHeld(carry: { species: Species; coat: Coat; facing: 1 | -1; grumpy: boolean } | null = null): void {
+  private spawnHeld(carry: { species: Species; coat: Coat; facing: 1 | -1; grumpy: boolean; stoic: boolean } | null = null): void {
     const sp = carry ? carry.species : this.keshi ? keshiSpecies(1) : withGirth(this.pickSpecies());
     const coat = carry ? carry.coat : this.pickCoat();
     const facing: 1 | -1 = carry ? carry.facing : Math.random() < 0.5 ? 1 : -1;
     // 少し不機嫌な猫はたまに（約12%）
     const grumpy = carry ? carry.grumpy : forcedGrumpy ?? Math.random() < 0.12;
     const c = new Cat(this.world, sp, coat, facing, 0, this.dropY, grumpy);
+    // 動じない猫（押されても無表情）はたまに（約15%）
+    c.stoic = carry ? carry.stoic : forcedStoic ?? (!grumpy && Math.random() < 0.15);
     this.dropX = this.clampX(this.targetX, c);
     this.held = c;
     this.heldIntro = 0;
@@ -444,6 +456,24 @@ export class Game {
 
     // 猫のふるまい
     this.env.squeeze = this.squeeze;
+    // みんなが目で追うもの: いま落ちている猫、なければ吊るされている猫の頭
+    let focus: { x: number; y: number } | null = null;
+    let moving = false;
+    for (let i = this.cats.length - 1; i >= Math.max(0, this.cats.length - 3); i--) {
+      const c = this.cats[i];
+      if (!c.landed) {
+        const hf = c.headFrame();
+        focus = { x: hf.x, y: hf.y };
+        moving = true;
+        break;
+      }
+    }
+    if (!focus && this.held) {
+      const hf = this.held.headFrame();
+      focus = { x: hf.x, y: hf.y };
+    }
+    this.env.focus = focus;
+    this.env.focusMoving = moving;
     for (const c of this.cats) c.update(dt, this.env);
     if (this.held) this.held.update(dt, this.env);
 
