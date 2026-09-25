@@ -79,3 +79,23 @@ body.zukan {
 .zukan .back a {
   color: #8a5a3a;
 }
+
+/* 右上の × ボタン（ゲームに戻る）。スクロールしても右上に残る */
+.zukan .close {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 250, 242, 0.92);
+  border: 1px solid rgba(90, 61, 43, 0.18);
+  box-shadow: 0 2px 8px rgba(90, 60, 30, 0.12);
+  color: #5a3d2b;
+  z-index: 10;
+}
+.zukan .close:active {
+  transform: scale(0.94);
+}
