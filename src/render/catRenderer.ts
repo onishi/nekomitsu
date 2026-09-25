@@ -185,8 +185,9 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
   const tailFront = cat.tailPose > 0.55;
   if (!tailFront) drawTail(ctx, cat);
 
-  // 後ろ足（奥側）: 少し暗く
-  drawLegs(ctx, cat, c, true);
+  // 脚（奥側は少し暗く）。胴体の下に描いて、輪郭からはみ出た部分だけ見せる
+  drawLegs(ctx, cat, ring, time, 'far');
+  drawLegs(ctx, cat, ring, time, 'near');
 
   // --- 胴体 ---
   // 押されると毛が寝て小さくなる
@@ -336,90 +337,195 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
     ctx.stroke();
   }
 
-  // 毛繕い中は前足を顔の手前に
-  const pawOnTop = cat.groomPose > 0.3;
-  if (!pawOnTop) drawLegs(ctx, cat, c, false);
   if (tailFront) drawTail(ctx, cat);
   drawHead(ctx, cat, time);
-  if (pawOnTop) drawLegs(ctx, cat, c, false);
+  // 毛繕い中は前脚を顔の手前に
+  if (cat.groomPose > 0.3) drawLegs(ctx, cat, ring, time, 'top');
 }
 
-function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean): void {
+type LegLayer = 'far' | 'near' | 'top';
+
+/**
+ * 脚: 肩・腰（胴体の輪郭に固定した付け根）から肉球の粒子まで、関節で曲がる先細りの脚を描く。
+ * 胴体より先に描くので、付け根は胴体に隠れ、輪郭からはみ出た部分だけが見える
+ * （後ろ脚は付け根が太く、お尻の下に太もものふくらみとして出る）。
+ * 吊るされている間は重力の向きにだらんと垂れ、動かすと振り子のように遅れて揺れる。
+ */
+function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: number, layer: LegLayer): void {
   const w = cat.world;
   const coat = cat.coat;
   const b = cat.species.b;
   const lp = cat.legPose;
-  // 香箱座りでは奥の足は隠れる: ぶら下がっているときだけ見せる
-  if (back && lp < 0.05) return;
-  ctx.save();
-  if (back) ctx.globalAlpha = Math.min(1, lp * 1.5);
+  const far = layer === 'far';
+  // 香箱座りでは奥の脚は隠れる: ぶら下がっているときだけ見せる
+  if (far && lp < 0.05) return;
+  const groom = cat.groomPose;
+  const roots: Pt[] = [];
+  const bellies: Pt[] = [];
   for (let k = 0; k < 2; k++) {
+    const [kt, kb] = cat.legAnchor[k];
+    const top = ring[kt];
+    const bot = ring[kb];
+    const dx = bot.x - top.x;
+    const dy = bot.y - top.y;
+    const l = Math.hypot(dx, dy) || 1;
+    bellies.push({ x: dx / l, y: dy / l });
+    roots.push(lerp(top, bot, k === 0 ? 0.6 : 0.56));
+  }
+  // 体の軸（頭 → お尻）
+  let axX = roots[1].x - roots[0].x;
+  let axY = roots[1].y - roots[0].y;
+  const axL = Math.hypot(axX, axY) || 1;
+  axX /= axL;
+  axY /= axL;
+
+  ctx.save();
+  if (far) ctx.globalAlpha = Math.min(1, lp * 1.5);
+  for (let k = 0; k < 2; k++) {
+    const front = k === 0;
+    if (layer === 'top' && !front) continue;
+    const bell = bellies[k];
     const fi = cat.feet[k];
-    const f = { x: w.x[fi], y: w.y[fi] };
-    // 奥の足は少しずらす
-    const off = back ? { x: -cat.facing * b * 0.28, y: -b * 0.06 } : { x: 0, y: 0 };
-    const foot = { x: f.x + off.x, y: f.y + off.y };
-    const hip = lerp(c, foot, 0.35);
-    const dx = foot.x - hip.x;
-    const dy = foot.y - hip.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const ang = Math.atan2(dy, dx);
-    const legW = b * 0.34;
-    const color = back ? shade(coat.tuxedo ? coat.paw : coat.base, -0.1) : coat.tuxedo ? coat.paw : coat.base;
-    // 脚（ぶら下がり時だけ見える長さ）
-    const raised = !back && k === 0 ? cat.groomPose : 0;
-    if (lp > 0.05 || back || raised > 0.05) {
-      ctx.save();
-      ctx.translate(hip.x, hip.y);
-      ctx.rotate(ang);
-      ctx.beginPath();
-      ctx.roundRect(0, -legW / 2, len, legW, legW / 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = coat.line;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-      ctx.restore();
+    let root = roots[k];
+    let paw = { x: w.x[fi], y: w.y[fi] };
+    const L1 = b * (front ? 0.82 : 0.9);
+    const L2 = b * (front ? 0.78 : 0.82);
+    // 吊るされている間: 重力の向きにだらんと垂らし、振り子の角度だけ振る（前後の脚で少し位相をずらす）
+    const hang = cat.hang * lp;
+    if (hang > 0.001) {
+      const th = cat.legSwing * (front ? 1 : 1.15) + 0.05 * Math.sin(time * 2.3 + k * 1.3 + cat.legAnchor[0][0]);
+      const reach = (L1 + L2) * 0.93;
+      const hx = root.x + Math.sin(th) * reach;
+      const hy = root.y + Math.cos(th) * reach;
+      paw = { x: paw.x + (hx - paw.x) * hang, y: paw.y + (hy - paw.y) * hang };
     }
-    // 肉球つきの手
+    // 着地後: 前脚は胸の下から手先を少しのぞかせ、後ろ脚はお腹の下にたたむ（粒子の位置と混ぜる）
+    const rest = 1 - lp;
+    if (rest > 0.001 && gw0(front, groom) < 1) {
+      const fwd = front ? 0.42 : 0.3;
+      const dn = front ? 0.95 : 0.78;
+      const tx = root.x - axX * b * fwd + bell.x * b * dn;
+      const ty = root.y - axY * b * fwd + bell.y * b * dn;
+      const m = rest * 0.7 * (1 - gw0(front, groom));
+      paw = { x: paw.x + (tx - paw.x) * m, y: paw.y + (ty - paw.y) * m };
+    }
+    // 手は胴体のお腹側だけ（転がって背中側へ回った粒子は、付け根の高さまで戻す）
+    const gw = gw0(front, groom);
+    if (gw > 0 && !far) {
+      // 毛繕い: 手先を口元へ（粒子は隣の猫に押されて届かないことがあるので、描画で寄せる）
+      const hf = cat.headFrame();
+      const lx = cat.facing * cat.headRX * 0.3;
+      const ly = cat.headRY * 0.55;
+      const ca = Math.cos(hf.angle);
+      const sa = Math.sin(hf.angle);
+      const mx = hf.x + lx * ca - ly * sa;
+      const my = hf.y + lx * sa + ly * ca;
+      paw = { x: paw.x + (mx - paw.x) * gw, y: paw.y + (my - paw.y) * gw };
+    }
+    const u = (paw.x - root.x) * bell.x + (paw.y - root.y) * bell.y;
+    const uMin = b * 0.1;
+    if (u < uMin) {
+      paw.x += bell.x * (uMin - u) * (1 - gw);
+      paw.y += bell.y * (uMin - u) * (1 - gw);
+    }
+    // 伸びすぎない（液体なので少しは伸びる）
+    let dx = paw.x - root.x;
+    let dy = paw.y - root.y;
+    let d = Math.hypot(dx, dy) || 1;
+    const maxD = (L1 + L2) * 1.3;
+    if (d > maxD) {
+      paw = { x: root.x + (dx / d) * maxD, y: root.y + (dy / d) * maxD };
+      dx = paw.x - root.x;
+      dy = paw.y - root.y;
+      d = maxD;
+    }
+    if (far) {
+      // 奥の脚は少しお尻側・上にずらす
+      const ox = axX * b * 0.26 - bell.x * b * 0.06;
+      const oy = axY * b * 0.26 - bell.y * b * 0.06;
+      root = { x: root.x + ox, y: root.y + oy };
+      paw = { x: paw.x + ox, y: paw.y + oy };
+    }
+    // 2関節の IK: 肘・かかとはお尻側へ曲げる
+    const s = Math.max(1, (d / (L1 + L2)) * 1.001);
+    const l1 = L1 * s;
+    const l2 = L2 * s;
+    const ux = dx / d;
+    const uy = dy / d;
+    const along = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, l1 * l1 - along * along));
+    let px = -uy;
+    let py = ux;
+    if (px * axX + py * axY < 0) {
+      px = -px;
+      py = -py;
+    }
+    const joint = { x: root.x + ux * along + px * h, y: root.y + uy * along + py * h };
+
+    const legCol = coat.base;
+    const pawCol = coat.paw;
+    const dim = (c: string) => (far ? shade(c, -0.12) : c);
+    const r0 = b * (front ? 0.27 : 0.44);
+    const r1 = b * (front ? 0.15 : 0.13);
+    const r2 = b * 0.12;
+    let pts = [root, joint, paw];
+    let rs = [r0, r1, r2];
+    if (layer === 'top') {
+      // 毛繕いで胴体の手前に出した前脚: 付け根の丸は見せず、上腕の途中から描く
+      const mid = lerp(root, joint, 0.55);
+      pts = [mid, joint, paw];
+      rs = [r1 * 1.15, r1, r2];
+    }
+    // 脚（輪郭線 → 塗り の順に、関節の丸と先細りの台形をまとめて塗る）
+    const lineW = far ? 1.1 : 1.3;
+    ctx.fillStyle = coat.line;
+    limbPath(ctx, pts, rs, lineW);
+    ctx.fill();
+    ctx.fillStyle = dim(legCol);
+    limbPath(ctx, pts, rs, 0);
+    ctx.fill();
+
+    // 手（肉球の丸み）: 下腿の向きに沿って、つま先を頭の側へ
+    const la = Math.atan2(paw.y - joint.y, paw.x - joint.x);
+    const toe = -(Math.cos(la) * axX + Math.sin(la) * axY) >= 0 ? 1 : -1;
+    const pr = b * 0.15;
     ctx.save();
-    ctx.translate(foot.x, foot.y);
-    const pr = b * (0.19 + 0.04 * lp);
+    ctx.translate(paw.x, paw.y);
+    ctx.rotate(la);
     ctx.beginPath();
-    ctx.ellipse(0, 0, pr * 1.15, pr * 0.85, ang - Math.PI / 2 + (1 - lp) * Math.PI / 2, 0, TAU);
-    ctx.fillStyle = back ? shade(coat.paw, -0.1) : coat.paw;
+    ctx.ellipse(pr * 0.15, toe * pr * 0.12, pr * 1.05, pr * 0.9, 0, 0, TAU);
+    ctx.fillStyle = dim(pawCol);
     ctx.fill();
     ctx.strokeStyle = coat.line;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1.1;
     ctx.stroke();
-    if (!back) {
+    if (!far) {
       const glass = w.contact[fi] & CONTACT_BOWL;
-      if (glass || raised > 0.5) {
-        // ガラスにむぎゅっと押し付けられた肉球 / 毛繕いで口元に向けた肉球
+      if ((glass && lp < 0.5) || groom > 0.5) {
+        // ガラスにむぎゅっと押し付けた肉球 / 毛繕いで口元に向けた肉球
         let na = Math.atan2(-w.cny[fi], -w.cnx[fi]);
-        if (raised > 0.5) {
+        if (groom > 0.5) {
           const hf = cat.headFrame();
-          na = Math.atan2(hf.y - foot.y, hf.x - foot.x);
+          na = Math.atan2(hf.y - paw.y, hf.x - paw.x);
         }
-        ctx.rotate(na);
+        ctx.rotate(na - la);
         ctx.fillStyle = '#f0a3a3';
         ctx.beginPath();
-        ctx.ellipse(pr * 0.35, 0, pr * 0.38, pr * 0.46, 0, 0, TAU);
+        ctx.ellipse(pr * 0.3, 0, pr * 0.34, pr * 0.42, 0, 0, TAU);
         ctx.fill();
         for (let t = -1; t <= 1; t++) {
           ctx.beginPath();
-          ctx.ellipse(pr * 0.82, t * pr * 0.48, pr * 0.16, pr * 0.19, 0, 0, TAU);
+          ctx.ellipse(pr * 0.76, t * pr * 0.44, pr * 0.15, pr * 0.17, 0, 0, TAU);
           ctx.fill();
         }
       } else {
-        // 指の割れ目
-        ctx.rotate(ang);
-        ctx.strokeStyle = shade(coat.paw, -0.3);
+        // 指の割れ目（つま先側）
+        ctx.strokeStyle = shade(pawCol, -0.3);
         ctx.lineWidth = 0.9;
-        for (const t of [-0.3, 0.3]) {
+        for (const t of [-0.28, 0.28]) {
           ctx.beginPath();
-          ctx.moveTo(pr * 0.5, t * pr);
-          ctx.lineTo(pr * 1.0, t * pr * 0.8);
+          ctx.moveTo(pr * (0.55 + t * 0.3), toe * pr * 0.25 + t * pr * 0.9);
+          ctx.lineTo(pr * (0.95 + t * 0.1), toe * pr * 0.35 + t * pr * 0.75);
           ctx.stroke();
         }
       }
@@ -427,6 +533,50 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, c: Pt, back: boolean)
     ctx.restore();
   }
   ctx.restore();
+}
+
+/** 毛繕いで口元へ上げている前脚の度合い */
+function gw0(front: boolean, groom: number): number {
+  return front ? Math.min(1, groom * 1.5) : 0;
+}
+
+/** 丸（関節）を先細りの台形でつないだ形のパス。grow だけ太らせる（輪郭線用） */
+function limbPath(ctx: CanvasRenderingContext2D, pts: Pt[], rs: number[], grow: number): void {
+  ctx.beginPath();
+  for (let k = 0; k < pts.length; k++) {
+    const p = pts[k];
+    const r = rs[k] + grow;
+    ctx.moveTo(p.x + r, p.y);
+    ctx.arc(p.x, p.y, r, 0, TAU);
+  }
+  for (let k = 0; k + 1 < pts.length; k++) {
+    const a = pts[k];
+    const c = pts[k + 1];
+    const ra = rs[k] + grow;
+    const rc = rs[k + 1] + grow;
+    const dx = c.x - a.x;
+    const dy = c.y - a.y;
+    const d = Math.hypot(dx, dy);
+    if (d <= Math.abs(ra - rc) + 1e-3) continue;
+    // 2つの円の外接線
+    const base = Math.atan2(dy, dx);
+    const phi = Math.acos((ra - rc) / d);
+    const a1 = base + phi;
+    const a2 = base - phi;
+    // 円（arc は時計回り = 正の向き）と同じ向きに回る四角形にする（nonzero で穴が開かないように）
+    const q = [
+      { x: a.x + Math.cos(a2) * ra, y: a.y + Math.sin(a2) * ra },
+      { x: c.x + Math.cos(a2) * rc, y: c.y + Math.sin(a2) * rc },
+      { x: c.x + Math.cos(a1) * rc, y: c.y + Math.sin(a1) * rc },
+      { x: a.x + Math.cos(a1) * ra, y: a.y + Math.sin(a1) * ra },
+    ];
+    let area = 0;
+    for (let i = 0; i < 4; i++) area += q[i].x * q[(i + 1) % 4].y - q[(i + 1) % 4].x * q[i].y;
+    if (area < 0) q.reverse();
+    ctx.moveTo(q[0].x, q[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y);
+    ctx.closePath();
+  }
 }
 
 function drawTail(ctx: CanvasRenderingContext2D, cat: Cat): void {

@@ -216,6 +216,24 @@ export class Cat {
       const q = ringPts[(k + 1) % N];
       per += Math.hypot(q.x - p.x, q.y - p.y);
     }
+    // 描画用: 肩と腰（前後の脚の付け根）を挟む背中側・お腹側の輪郭点
+    const nearest = (x: number, belly: boolean) => {
+      let bk = 0;
+      let bd = Infinity;
+      for (let k = 0; k < N; k++) {
+        if (ringPts[k].y > 0 !== belly) continue;
+        const d = Math.abs(ringPts[k].x - x);
+        if (d < bd) {
+          bd = d;
+          bk = k;
+        }
+      }
+      return bk;
+    };
+    this.legAnchor = [
+      [nearest(a * 0.5, false), nearest(a * 0.5, true)],
+      [nearest(-a * 0.52, false), nearest(-a * 0.52, true)],
+    ];
     const spacing = per / N;
     this.ringR = Math.max(4, spacing * 0.34);
 
@@ -645,6 +663,7 @@ export class Cat {
     let headHits = 0;
     for (const i of this.head) if (w.contact[i] & CONTACT_CAT) headHits++;
     for (const i of this.feet) if (w.contact[i]) bowlHits++;
+    this.updateSwing(dt, cx);
 
     if (this.held) {
       this.expression = 'curious';
@@ -1028,4 +1047,29 @@ export class Cat {
     return { x: hx, y: hy, angle: this.held ? this.heldAngle : this.headCluster.angle };
   }
   heldAngle = 0;
+
+  /** 描画用: 前脚・後ろ脚の付け根を挟む輪郭点（ring 配列の位置: [背中側, お腹側]） */
+  readonly legAnchor: [number, number][];
+  /** 描画用: ぶら下がった脚の振れ角（振り子。吊るしたまま動かすと遅れて揺れる） */
+  legSwing = 0;
+  private legSwingV = 0;
+  /** 描画用: 吊るされている度合い（離すとなめらかに 0 へ） */
+  hang = 1;
+  private swingX = NaN;
+  private swingVx = 0;
+
+  private updateSwing(dt: number, cx: number): void {
+    if (dt <= 0) return;
+    const vx = Number.isNaN(this.swingX) ? 0 : (cx - this.swingX) / dt;
+    this.swingX = cx;
+    const ax = Math.max(-30000, Math.min(30000, (vx - this.swingVx) / dt));
+    this.swingVx += (vx - this.swingVx) * 0.6;
+    // 動く支点から吊るした振り子: θ'' = -(g/L) sinθ - (a/L) cosθ - 減衰
+    const L = this.species.b * 1.6;
+    const th = this.legSwing;
+    const acc = -(1500 / L) * Math.sin(th) - (ax / L) * Math.cos(th) - 3.5 * this.legSwingV;
+    this.legSwingV += acc * dt;
+    this.legSwing = Math.max(-1, Math.min(1, th + this.legSwingV * dt));
+    this.hang += ((this.held ? 1 : 0) - this.hang) * Math.min(1, dt * (this.held ? 20 : 7));
+  }
 }
