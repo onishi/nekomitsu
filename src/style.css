@@ -125,6 +125,23 @@ body {
   box-shadow: 0 10px 40px rgba(90, 60, 30, 0.22);
   text-align: center;
   width: min(360px, calc(100vw - 32px));
+  position: relative;
+}
+
+/* 隠しリンク（ねこ図鑑）: メニューの右下に、うっすら肉球 */
+#menu .secret {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  padding: 4px;
+  color: var(--ink);
+  opacity: 0.16;
+  line-height: 0;
+  transition: opacity 0.2s;
+}
+#menu .secret:hover,
+#menu .secret:focus-visible {
+  opacity: 0.6;
 }
 
 #menu::backdrop {
@@ -434,6 +451,7 @@ button.icon:active {
 
 #menu .credit {
   margin: 12px 0 0;
+  padding: 0 20px;
   font-size: 11px;
   opacity: 0.55;
   line-height: 1.5;
@@ -441,4 +459,5 @@ button.icon:active {
 
 #menu .credit a {
   color: inherit;
+  white-space: nowrap;
 }
