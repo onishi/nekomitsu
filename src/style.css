@@ -431,3 +431,14 @@ button.icon:active {
     padding: 0 12px;
   }
 }
+
+#menu .credit {
+  margin: 12px 0 0;
+  font-size: 11px;
+  opacity: 0.55;
+  line-height: 1.5;
+}
+
+#menu .credit a {
+  color: inherit;
+}

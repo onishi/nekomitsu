@@ -37,6 +37,7 @@ function setHint(mode: GameMode): void {
 setHint('mitsu');
 
 const game = new Game();
+void game.sound.loadSamples();
 const view: View = { scale: 1, ox: 0, oy: 0, dpr: 1, w: 1, h: 1 };
 
 /** 重い端末では描画解像度を自動で下げる */

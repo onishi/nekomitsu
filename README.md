@@ -158,7 +158,9 @@ Canvas 2D。物理と描画は分離していて、描画側で
 
 ### サウンド（`src/audio.ts`）
 
-WebAudio で合成しているので音声ファイルは不要です。落とすときにニャー（`src/meow.ts`: 声帯っぽい音源に揺らぎと息の音を足し、口の「ミ→ア→ウ」の動きを3つのフォルマントで合成。長さや抑揚は毎回変わり、体の小さい猫ほど高い声）/ ぽすっ（着地）/ むにゅ（押し込み）/ すぽっ（隙間に収まる）/
+落とすときのニャーは録音素材（`public/sounds/meow-01〜05.mp3`、下記クレジット）からランダムに選び、頭の無音を飛ばして音量をそろえ、
+体の大きい猫ほど再生を遅くして低い声にします。読み込めなかったときは合成のニャー（`src/meow.ts`: 声帯っぽい音源に揺らぎと息の音を足し、口の「ミ→ア→ウ」の動きを3つのフォルマントで合成）に切り替わります。
+そのほかの効果音は WebAudio で合成しています: ぽすっ（着地）/ むにゅ（押し込み）/ すぽっ（隙間に収まる）/
 ゴロゴロ（眠る）/ クリア音。最初の操作で有効になり、音がなくてもゲームは成立します。
 
 ## ファイル構成
@@ -184,3 +186,9 @@ tools/sim.ts         ヘッドレス物理シミュレーション
 
 タイトル「ねこみつ」「ねこけし」は [Yuji Syuku](https://fonts.google.com/specimen/Yuji+Syuku)（SIL Open Font License 1.1）を使い、
 この6文字（ねこみつけし）だけを収録したサブセット（`src/assets/yuji-syuku-nekomitsu.woff2`）を同梱しています。
+
+## 効果音
+
+猫の鳴き声（`public/sounds/meow-01〜05.mp3`）は Virtual_Vibes さんの素材を
+[Pixabay](https://pixabay.com/)（Pixabay Content License）から使わせていただいています。
+Virtual_Vibes さんへの支援はこちら: <https://ko-fi.com/virtualvibes>

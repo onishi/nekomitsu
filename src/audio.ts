@@ -1,9 +1,21 @@
 import { synthMeow } from './meow';
 
 /**
- * 効果音（WebAudio で合成。音声ファイル不要）。
+ * 効果音（ほぼ WebAudio で合成）。ニャーだけは録音素材（public/sounds）を使い、読めなければ合成する。
  * AudioContext はユーザー操作後に生成する。音が出なくてもゲームは成立する。
  */
+
+/** 鳴き声の素材: Virtual_Vibes（Pixabay） */
+const MEOW_FILES = ['meow-01.mp3', 'meow-02.mp3', 'meow-03.mp3', 'meow-04.mp3', 'meow-05.mp3'];
+
+interface MeowSample {
+  buf: AudioBuffer;
+  /** 頭の無音を飛ばす位置（秒） */
+  start: number;
+  /** 音量をそろえる倍率 */
+  gain: number;
+}
+
 export class Sound {
   enabled = true;
   private ctx: AudioContext | null = null;
@@ -15,6 +27,29 @@ export class Sound {
   private lastPop = 0;
   private createdAt = 0;
   private lastSupo = 0;
+  private meows: MeowSample[] = [];
+  private lastMeowIdx = -1;
+
+  /** 鳴き声の素材を読み込む（ユーザー操作前でよい。AudioBuffer はどの AudioContext でも使える） */
+  async loadSamples(): Promise<void> {
+    const OAC = window.OfflineAudioContext || (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext;
+    if (!OAC) return;
+    const dec = new OAC(1, 1, 44100);
+    const base = import.meta.env.BASE_URL + 'sounds/';
+    const got = await Promise.all(
+      MEOW_FILES.map(async (f) => {
+        try {
+          const res = await fetch(base + f);
+          if (!res.ok) return null;
+          const buf = await dec.decodeAudioData(await res.arrayBuffer());
+          return analyze(buf);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    this.meows = got.filter((m): m is MeowSample => m !== null);
+  }
 
   /** ユーザー操作のハンドラ内で呼ぶ */
   unlock(): void {
@@ -343,8 +378,43 @@ export class Sound {
     const ctx = this.ready();
     if (!ctx) return;
     const g = ctx.createGain();
-    g.gain.value = 0.55;
     g.connect(this.master!);
-    synthMeow(ctx, g, ctx.currentTime + 0.01, pitch);
+    const n = this.meows.length;
+    if (n === 0) {
+      g.gain.value = 0.55;
+      synthMeow(ctx, g, ctx.currentTime + 0.01, pitch);
+      return;
+    }
+    // 続けて同じ声にならないように選ぶ
+    let i = Math.floor(Math.random() * n);
+    if (n > 1 && i === this.lastMeowIdx) i = (i + 1 + Math.floor(Math.random() * (n - 1))) % n;
+    this.lastMeowIdx = i;
+    const m = this.meows[i];
+    const src = ctx.createBufferSource();
+    src.buffer = m.buf;
+    // 素材は子猫の声。大きい猫ほど再生を遅くして低く
+    src.playbackRate.value = Math.min(1.3, Math.max(0.72, pitch * 0.95));
+    g.gain.value = 0.5 * m.gain;
+    src.connect(g);
+    src.start(ctx.currentTime + 0.01, m.start);
   }
+}
+
+/** 頭の無音の位置と、声の部分の音量（RMS）をそろえる倍率を求める */
+function analyze(buf: AudioBuffer): MeowSample {
+  const d = buf.getChannelData(0);
+  let pk = 0;
+  for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i]));
+  const th = pk * 0.05;
+  let s = 0;
+  while (s < d.length && Math.abs(d[s]) < th) s++;
+  let e = d.length - 1;
+  while (e > s && Math.abs(d[e]) < th) e--;
+  let a = 0;
+  for (let i = s; i <= e; i++) a += d[i] * d[i];
+  const rms = Math.sqrt(a / Math.max(1, e - s + 1));
+  const start = Math.max(0, s / buf.sampleRate - 0.01);
+  // 目標 RMS 0.15。極端に上げすぎない
+  const gain = rms > 0 ? Math.min(3, 0.15 / rms) : 1;
+  return { buf, start, gain };
 }
