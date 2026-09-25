@@ -1092,7 +1092,9 @@ export class Cat {
 
 /**
  * 胴体の高さの倍率（u: -1 = お尻 … +1 = 首の側、belly: お腹側か、aspect: b / a）。
- * 背中: お尻（腰）が高く、首へ向かってなだらかに低く・細くなる。
+ * 背中: お尻（腰）が高く盛り上がる。
+ *   首の側の背中は下げない: 下げると胴体の前の上端が頭と深く重なり、頭と胴体が内側で押し合い続けて
+ *   猫がガラスの壁を自分でよじ登ってしまう（首の側はどうせ頭に隠れる）。
  * お腹: 太もものところは深く、その前でくびれる（縦長の猫ほど控えめ）。胸から首の下へ細くなる。
  */
 function bodyProfile(u: number, belly: boolean, aspect: number): number {
@@ -1101,7 +1103,7 @@ function bodyProfile(u: number, belly: boolean, aspect: number): number {
     const t = Math.max(0, Math.min(1, (u - e0) / (e1 - e0)));
     return h * t * t * (3 - 2 * t);
   };
-  if (!belly) return 1 + bump(0.14, -0.5, 0.35) + ss(-0.38, -0.15, 0.85);
+  if (!belly) return 1 + bump(0.2, -0.45, 0.4);
   const tuck = Math.min(1, 0.55 / aspect);
   return 1 + bump(0.08, -0.62, 0.25) + bump(-0.26 * tuck, -0.15, 0.25) + bump(0.04, 0.4, 0.3) + ss(-0.18, 0.5, 1);
 }

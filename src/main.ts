@@ -124,6 +124,11 @@ canvas.addEventListener('pointermove', (e) => {
   lastX = e.clientX;
   lastY = e.clientY;
   if (mode === 'stir') {
+    // マウスのボタンがもう押されていない（離したのが伝わらなかった）
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+      endPress();
+      return;
+    }
     game.stirMove(toWorldX(e.clientX), toWorldY(e.clientY), performance.now());
     return;
   }
@@ -150,6 +155,12 @@ canvas.addEventListener('pointerup', (e) => {
   }
 });
 canvas.addEventListener('pointercancel', endPress);
+// 指を離したことが伝わらないまま、かき混ぜの指が残らないように
+canvas.addEventListener('lostpointercapture', endPress);
+window.addEventListener('blur', endPress);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) endPress();
+});
 const keys = new Set<string>();
 window.addEventListener('keydown', (e) => {
   // メニューを出している間はダイアログのボタン操作に任せる
