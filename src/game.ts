@@ -42,6 +42,16 @@ const forcedSpecies = (() => {
   }
 })();
 
+/** URL の ?coat=ushi などで柄を固定できる（動作確認用。ねこみつのみ） */
+const forcedCoat = (() => {
+  try {
+    const k = new URLSearchParams(globalThis.location?.search ?? '').get('coat');
+    return COATS.find((c) => c.key === k) ?? null;
+  } catch {
+    return null;
+  }
+})();
+
 export type Phase = 'playing' | 'judging' | 'cleared' | 'gameover';
 
 /** ねこみつ（猫でいっぱいにする）/ ねこけし（同じ猫をくっつけて消す） */
@@ -246,6 +256,7 @@ export class Game {
 
   private pickCoat(): Coat {
     if (this.keshi) return this.keshi.pickCoat();
+    if (forcedCoat) return forcedCoat;
     for (let tries = 0; tries < 10; tries++) {
       const c = COATS[Math.floor(Math.random() * COATS.length)];
       if (!this.lastCoats.includes(c.key)) {

@@ -184,6 +184,12 @@ export interface Coat {
   patches?: { color: string; at: number; depth: number; size: number }[];
   /** ハチワレ: 顔の下半分と胸・足先が白 */
   tuxedo?: boolean;
+  /** 〇〇白（キジ白・茶白など）: 口元・あご・胸・お腹・足先が白 */
+  bicolor?: boolean;
+  /** 地の色が暗い（顔の線・ひげを明るく描く） */
+  dark?: boolean;
+  /** くつした: すねから下が足先の色 */
+  socks?: boolean;
   /** 足先の色 */
   paw: string;
   eye: string;
@@ -225,6 +231,7 @@ export const COATS: Coat[] = [
   {
     key: 'kuro',
     name: '黒猫',
+    dark: true,
     base: '#2c2826',
     line: '#141211',
     belly: '#34302d',
@@ -283,6 +290,101 @@ export const COATS: Coat[] = [
     eye: '#9ec25a',
     nose: '#b7837f',
     earInner: '#d2a8a3',
+    faceStripes: true,
+  },
+  {
+    key: 'kijishiro',
+    name: 'キジ白',
+    base: '#8c6c4c',
+    line: '#4c3828',
+    belly: '#fbf8f3',
+    stripe: '#4a3525',
+    paw: '#fbf8f3',
+    eye: '#b7c24a',
+    nose: '#d99a90',
+    earInner: '#d9a08f',
+    faceStripes: true,
+    bicolor: true,
+  },
+  {
+    key: 'chashiro',
+    name: '茶白',
+    base: '#e39a52',
+    line: '#9a5a24',
+    belly: '#fdf8f0',
+    stripe: '#c46e2e',
+    paw: '#fdf8f0',
+    eye: '#d9a53a',
+    nose: '#e59a93',
+    earInner: '#f1b29c',
+    faceStripes: true,
+    bicolor: true,
+  },
+  {
+    key: 'sabashiro',
+    name: 'サバ白',
+    base: '#8f9398',
+    line: '#4b4f54',
+    belly: '#fbfaf7',
+    stripe: '#4c5156',
+    paw: '#fbfaf7',
+    eye: '#9ec25a',
+    nose: '#e0a09a',
+    earInner: '#d2a8a3',
+    faceStripes: true,
+    bicolor: true,
+  },
+  {
+    key: 'ushi',
+    name: '牛柄',
+    base: '#fbf8f3',
+    line: '#a89684',
+    belly: '#ffffff',
+    paw: '#fbf8f3',
+    eye: '#d8b13e',
+    nose: '#e59a93',
+    earInner: '#f2b9ad',
+    patches: [
+      { color: '#2a2624', at: 0.08, depth: 0.42, size: 0.62 },
+      { color: '#2a2624', at: 0.33, depth: 0.5, size: 0.48 },
+      { color: '#2a2624', at: 0.6, depth: 0.38, size: 0.4 },
+    ],
+  },
+  {
+    key: 'kutsushita',
+    name: 'くつした',
+    dark: true,
+    socks: true,
+    base: '#2c2826',
+    line: '#141211',
+    belly: '#34302d',
+    paw: '#fbf8f3',
+    eye: '#d7c24a',
+    nose: '#3a3331',
+    earInner: '#5a4644',
+  },
+  {
+    key: 'gray',
+    name: 'グレー',
+    base: '#8b95a3',
+    line: '#4a525e',
+    belly: '#a9b2be',
+    paw: '#8b95a3',
+    eye: '#8fc46a',
+    nose: '#6f7580',
+    earInner: '#c7a9ab',
+  },
+  {
+    key: 'cream',
+    name: 'クリーム',
+    base: '#f0d0a2',
+    line: '#b08a5c',
+    belly: '#fbefdc',
+    stripe: '#dcae78',
+    paw: '#f6ddb9',
+    eye: '#d9a53a',
+    nose: '#e69c90',
+    earInner: '#f3bca6',
     faceStripes: true,
   },
 ];

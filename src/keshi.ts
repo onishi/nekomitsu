@@ -15,16 +15,19 @@ import type { Game } from './game';
  * ねこけしで使う毛色（色だけでなく柄でも見分けられる）。この順に登場する。
  * 最初は4種類で、落とした数に応じて増えていく（種類が多いほど同じ猫が隣り合いにくく、難しい）
  */
-export const KESHI_COATS: Coat[] = ['cha', 'kiji', 'kuro', 'shiro', 'hachi', 'saba', 'mike'].map(
+// 後半の追加種類（牛柄・茶白）は、それまでの柄と見間違えにくいものだけ
+export const KESHI_COATS: Coat[] = ['cha', 'kiji', 'kuro', 'shiro', 'hachi', 'saba', 'mike', 'ushi', 'chashiro'].map(
   (k) => COATS.find((c) => c.key === k)!,
 );
 
 /** 落とした数 → 登場する毛色の数。[何匹目から, 種類数] */
-const COAT_STEPS: [number, number][] = [
+export const COAT_STEPS: [number, number][] = [
   [0, 4],
   [16, 5],
   [36, 6],
   [60, 7],
+  [100, 8],
+  [150, 9],
 ];
 
 /** 4匹ぶんで消えるようになった後は、上限ラインを超えていられる時間が少しずつ短くなる（3秒 → 最短1.8秒） */

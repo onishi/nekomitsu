@@ -1,0 +1,81 @@
+html.zukan,
+html.zukan body {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+}
+body.zukan {
+  touch-action: auto;
+  user-select: none;
+  padding: 16px 16px 40px;
+  box-sizing: border-box;
+}
+.zukan header {
+  text-align: center;
+  margin: 8px 0 18px;
+}
+.zukan h1 {
+  font-family: 'Yuji Syuku', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  font-size: 34px;
+  letter-spacing: 0.25em;
+  margin: 0;
+  color: #5a3d2b;
+}
+.zukan .lead {
+  margin: 6px 0 0;
+  font-size: 13px;
+  opacity: 0.65;
+}
+.zukan section {
+  max-width: 960px;
+  margin: 0 auto 26px;
+}
+.zukan h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+  color: #5a3d2b;
+  border-bottom: 1px solid rgba(90, 61, 43, 0.2);
+  padding-bottom: 4px;
+}
+.zukan .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.zukan .card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 6px 10px;
+  border: 1px solid rgba(90, 61, 43, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.zukan .card:active {
+  transform: scale(0.98);
+}
+.zukan .card canvas {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: block;
+}
+.zukan .name {
+  font-weight: 700;
+  font-size: 15px;
+  color: #5a3d2b;
+}
+.zukan .note {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+.zukan .back {
+  text-align: center;
+  font-size: 13px;
+}
+.zukan .back a {
+  color: #8a5a3a;
+}

@@ -228,8 +228,8 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
       const bot = { x: bx / bn, y: by / bn };
       const chest = lerp({ x: fx / fn, y: fy / fn }, c, 0.15);
       const scaleR = Math.sqrt(Math.max(0.4, compress));
-      if (coat.tuxedo) {
-        // ハチワレ: 胸からお腹にかけてくっきり白
+      if (coat.tuxedo || coat.bicolor) {
+        // ハチワレ・〇〇白: 胸からお腹にかけてくっきり白
         ctx.fillStyle = coat.belly;
         const belly: Pt[] = [];
         for (let k = 0; k < N; k++) if (rl[cat.ring[k] - st].y > b * 0.05) belly.push(ring[k]);
@@ -484,6 +484,13 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
     ctx.fillStyle = dim(legCol);
     limbPath(ctx, pts, rs, 0);
     ctx.fill();
+    if (coat.socks) {
+      // くつした: すねの途中から下を足先の色に
+      const sock = lerp(joint, paw, 0.3);
+      ctx.fillStyle = dim(pawCol);
+      limbPath(ctx, [sock, paw], [rs[1] * 0.92, rs[2]], 0);
+      ctx.fill();
+    }
 
     // 手（肉球の丸み）: 下腿の向きに沿って、つま先を頭の側へ
     const la = Math.atan2(paw.y - joint.y, paw.x - joint.x);
@@ -722,6 +729,17 @@ function drawHead(ctx: CanvasRenderingContext2D, cat: Cat, time: number): void {
     ctx.fillStyle = coat.belly;
     ctx.fill();
   }
+  if (coat.bicolor) {
+    // 〇〇白: 鼻の下から口元・あごにかけて白（ハチワレほど上がらない）
+    ctx.beginPath();
+    const c0 = L(fx, 0.62 * r);
+    ctx.ellipse(c0.x, c0.y, r * 0.62, r * 0.5, hf.angle, 0, TAU);
+    const n0 = L(fx, 0.2 * r);
+    ctx.moveTo(n0.x + r * 0.2, n0.y);
+    ctx.ellipse(n0.x, n0.y, r * 0.2, r * 0.26, hf.angle, 0, TAU);
+    ctx.fillStyle = coat.belly;
+    ctx.fill();
+  }
   if (coat.patches) {
     const a = L(-0.75 * r * f, -0.55 * r);
     const bpt = L(0.8 * r * f, -0.65 * r);
@@ -762,7 +780,7 @@ function drawHead(ctx: CanvasRenderingContext2D, cat: Cat, time: number): void {
   // マズル（ω のふくらみ）
   if (!coat.tuxedo) {
     ctx.fillStyle = coat.belly;
-    ctx.globalAlpha = coat.key === 'kuro' ? 0.25 : 0.75;
+    ctx.globalAlpha = coat.dark ? 0.25 : coat.bicolor ? 1 : 0.75;
     for (const side of [-1, 1]) {
       const m = L(fx + side * 0.17 * r, 0.36 * r);
       ctx.beginPath();
@@ -799,7 +817,7 @@ function drawFace(
 ): void {
   const coat = cat.coat;
   const e = cat.expression;
-  const dark = coat.key === 'kuro' || (coat.tuxedo && false);
+  const dark = !!coat.dark;
   const lineCol = dark ? '#0d0b0a' : '#3a2a22';
   const open = Math.max(0, Math.min(1.2, cat.eyeOpen * (1 - cat.blink)));
   const eyeY = -0.04 * r;
@@ -1008,7 +1026,7 @@ function drawFace(
   ctx.restore();
 
   // ヒゲ
-  ctx.strokeStyle = dark || coat.key === 'hachi' ? 'rgba(255,255,255,0.55)' : 'rgba(90,70,60,0.45)';
+  ctx.strokeStyle = dark || coat.tuxedo ? 'rgba(255,255,255,0.55)' : 'rgba(90,70,60,0.45)';
   if (coat.tuxedo) ctx.strokeStyle = 'rgba(120,110,105,0.55)';
   ctx.lineWidth = 0.9;
   for (const side of [-1, 1]) {
