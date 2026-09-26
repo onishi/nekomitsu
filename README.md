@@ -59,6 +59,8 @@ npm run deploy     # ビルドして Cloudflare Workers（静的アセット）�
 
 公開URL: https://nekomitsu.wagaya.org
 
+監視: `/_monitor/health`（`worker/index.js`）を [monitor.wagaya.org](https://monitor.wagaya.org) が毎時確認しています。
+
 デプロイには `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID`（または `wrangler login`）が必要です。設定は `wrangler.jsonc`。
 
 動作確認用の URL パラメータ:
