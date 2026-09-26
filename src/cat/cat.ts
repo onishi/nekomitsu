@@ -24,7 +24,8 @@ export type Expression =
   | 'happy' // クリア
   | 'grumpy' // 不機嫌な猫のふだんの顔（ジト目・へ の字口）
   | 'annoyed' // 不機嫌な猫が触られた・押された（イカ耳）
-  | 'blank'; // 無表情（スン…）。動じない猫は押されてもこの顔
+  | 'blank' // 無表情（スン…）。動じない猫は押されてもこの顔
+  | 'stretch'; // のびー: 目をつぶって横線だけ（- -）
 
 /** 落ち着いた猫が自分からするアクション */
 export type CatAction = 'none' | 'groom' | 'lick' | 'yawn' | 'stretch';
@@ -850,7 +851,8 @@ export class Cat {
     else if (this.impactTimer > 0) e = 'startled';
     else if (this.pressTimer > 0 || squash > 1.9) e = this.stoic ? 'blank' : 'squint';
     else if (this.action === 'yawn') e = 'yawn';
-    else if (this.action === 'groom' || this.action === 'lick' || this.action === 'stretch') e = 'groom';
+    else if (this.action === 'groom' || this.action === 'lick') e = 'groom';
+    else if (this.action === 'stretch') e = 'stretch';
     else if (this.licked > 0 || (this.headBuried > 0.6 && this.calm > 1.5)) e = 'bliss';
     else if (this.calm > this.sleepAt) e = 'sleep';
     else if (this.calm > this.sleepAt / 2) e = 'sleepy';
@@ -882,7 +884,7 @@ export class Cat {
         ? 1.15
         : e === 'sleepy'
           ? 0.45
-          : e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn'
+          : e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn' || e === 'stretch'
             ? 0
             : e === 'squint'
               ? 0.25
@@ -928,7 +930,7 @@ export class Cat {
             this.actionCooldown = 0;
             // 起きたら、のびー
             if (Math.random() < 0.7 && this.canStretch()) {
-              this.startAction('stretch', 2.4, null);
+              this.startAction('stretch', 3, null);
               this.actionCooldown = 2;
             }
           }
@@ -940,7 +942,7 @@ export class Cat {
           // スン…（しばらく無表情）
           this.blankTimer = 3 + Math.random() * 3;
         } else if (r0 < 0.2 && this.canStretch()) {
-          this.startAction('stretch', 2.4, null);
+          this.startAction('stretch', 3, null);
         } else {
           const target = this.findLickTarget(env);
           const r = Math.random();
@@ -993,8 +995,10 @@ export class Cat {
     } else if (this.action === 'stretch') {
       // のびー: 前脚を前へ伸ばして、胴体をにゅーっと伸ばす。頭は少し前に下げる
       const k = t / this.actionDur;
-      stretch = Math.sin(Math.min(1, k) * Math.PI) ** 0.6;
-      this.headAim = 0.16 * f * stretch;
+      stretch = Math.sin(Math.min(1, k) * Math.PI) ** 0.5;
+      this.headAim = 0.24 * f * stretch;
+      // いちばん伸びたところで、ふわぁ…とあくび
+      yawn = Math.max(0, Math.sin(Math.min(1, Math.max(0, (k - 0.3) / 0.5)) * Math.PI)) * 0.8;
     }
     this.stretchPose += (stretch - this.stretchPose) * Math.min(1, dt * 5);
     if (stretch === 0 && this.stretchPose < 1e-3) this.stretchPose = 0;
@@ -1018,14 +1022,14 @@ export class Cat {
       this.calm = Math.max(this.calm, this.sleepAt - 0.5);
     } else if (kind === 'wake') {
       this.calm = Math.min(this.calm, 2);
-      if (Math.random() < 0.6 && this.action === 'none') this.startAction('stretch', 2.4, null);
+      if (Math.random() < 0.6 && this.action === 'none') this.startAction('stretch', 3, null);
     } else if (kind === 'blank') {
       this.blankTimer = 3 + Math.random() * 3;
     } else if (kind === 'slowBlink') {
       this.slowBlinkT = 1e-4;
     } else if (this.action === 'none') {
       this.calm = Math.min(Math.max(this.calm, 1.6), this.sleepAt / 2 - 0.1);
-      this.startAction(kind, kind === 'yawn' ? 1.6 : kind === 'stretch' ? 2.4 : 2.5 + Math.random() * 2.5, null);
+      this.startAction(kind, kind === 'yawn' ? 1.6 : kind === 'stretch' ? 3 : 2.5 + Math.random() * 2.5, null);
     }
   }
 

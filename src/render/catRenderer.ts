@@ -146,7 +146,9 @@ export function strokeCatSilhouette(ctx: CanvasRenderingContext2D, cat: Cat): vo
     gy = new Float64Array(64);
   }
   cat.ringGoals(gx, gy);
-  const ring = displayRing(cat, cat.ring, gx, gy, cat.held ? 0 : 0.3, cat.ringR * 0.95);
+  const ring0 = displayRing(cat, cat.ring, gx, gy, cat.held ? 0 : 0.3, cat.ringR * 0.95);
+  const warp = stretchWarp(cat, ring0);
+  const ring = warp ? ring0.map((p) => warp.apply(p)) : ring0;
   const c = centroid(ring);
   ctx.beginPath();
   bodyPath(ctx, ring, cat.species.fluff * 7, c);
@@ -154,6 +156,48 @@ export function strokeCatSilhouette(ctx: CanvasRenderingContext2D, cat: Cat): vo
   ctx.strokeStyle = cat.coat.line;
   ctx.lineJoin = 'round';
   ctx.stroke();
+}
+
+/** のびーでお尻を持ち上げる変形（描画だけ） */
+interface StretchWarp {
+  apply(p: Pt): Pt;
+}
+
+/**
+ * のびー: 前脚を伸ばして胸を低く、お尻を高く上げたポーズ。
+ * 物理（胴体の形）は変えず、描くときに輪郭・しっぽ・後ろ脚の付け根を背中側へ持ち上げる
+ * （宙に浮いたお尻を物理で支えると不安定になり、まわりの猫も押してしまうため）。
+ */
+function stretchWarp(cat: Cat, ring: Pt[]): StretchWarp | null {
+  const st = cat.stretchPose;
+  if (st < 0.01) return null;
+  const bf = ring[cat.legAnchor[0][1]];
+  const br = ring[cat.legAnchor[1][1]];
+  const tf = ring[cat.legAnchor[0][0]];
+  let ux = bf.x - br.x;
+  let uy = bf.y - br.y;
+  const len = Math.hypot(ux, uy) || 1;
+  ux /= len;
+  uy /= len;
+  let nx = -uy;
+  let ny = ux;
+  if ((tf.x - bf.x) * nx + (tf.y - bf.y) * ny < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const mx = (bf.x + br.x) / 2;
+  const my = (bf.y + br.y) / 2;
+  const half = len / 2;
+  const lift = st * cat.species.b * 1.0;
+  return {
+    apply(p: Pt): Pt {
+      // s: -1 = お尻 … +1 = 胸。胸は床のまま、腰から後ろを持ち上げる
+      const sAlong = ((p.x - mx) * ux + (p.y - my) * uy) / half;
+      const t = Math.max(0, Math.min(1, (0.45 - sAlong) / 1.45));
+      const k = t * t * (3 - 2 * t) * lift;
+      return { x: p.x + nx * k, y: p.y + ny * k };
+    },
+  };
 }
 
 export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, outline = true): void {
@@ -169,7 +213,9 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
   const held = cat.held;
   // 吊るされている間はクラスタのゴールが古いので粒子位置そのまま
   const gb = held ? 0 : 0.3;
-  const ring = displayRing(cat, cat.ring, gx, gy, gb, cat.ringR * 0.95);
+  const ring0 = displayRing(cat, cat.ring, gx, gy, gb, cat.ringR * 0.95);
+  const warp = stretchWarp(cat, ring0);
+  const ring = warp ? ring0.map((p) => warp.apply(p)) : ring0;
   const c = centroid(ring);
   const lineW = 1.6;
 
@@ -183,11 +229,11 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
   const compress = Math.min(1.1, (0.5 * area) / cat.bodyArea.rest);
 
   const tailFront = cat.tailPose > 0.55;
-  if (!tailFront) drawTail(ctx, cat);
+  if (!tailFront) drawTail(ctx, cat, warp);
 
   // 脚（奥側は少し暗く）。胴体の下に描いて、輪郭からはみ出た部分だけ見せる
-  drawLegs(ctx, cat, ring, time, 'far');
-  drawLegs(ctx, cat, ring, time, 'near');
+  drawLegs(ctx, cat, ring, time, 'far', ring0);
+  drawLegs(ctx, cat, ring, time, 'near', ring0);
 
   // --- 胴体 ---
   // 押されると毛が寝て小さくなる
@@ -337,10 +383,10 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
     ctx.stroke();
   }
 
-  if (tailFront) drawTail(ctx, cat);
+  if (tailFront) drawTail(ctx, cat, warp);
   drawHead(ctx, cat, time);
   // 毛繕い中は前脚を顔の手前に
-  if (cat.groomPose > 0.3) drawLegs(ctx, cat, ring, time, 'top');
+  if (cat.groomPose > 0.3) drawLegs(ctx, cat, ring, time, 'top', ring0);
 }
 
 type LegLayer = 'far' | 'near' | 'top';
@@ -351,7 +397,7 @@ type LegLayer = 'far' | 'near' | 'top';
  * （後ろ脚は付け根が太く、お尻の下に太もものふくらみとして出る）。
  * 吊るされている間は重力の向きにだらんと垂れ、動かすと振り子のように遅れて揺れる。
  */
-function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: number, layer: LegLayer): void {
+function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: number, layer: LegLayer, floorRing: Pt[] = ring): void {
   const w = cat.world;
   const coat = cat.coat;
   const b = cat.species.b;
@@ -371,7 +417,8 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
     const dy = bot.y - top.y;
     const l = Math.hypot(dx, dy) || 1;
     bellies.push({ x: dx / l, y: dy / l });
-    bots.push(bot);
+    // 手先の置き場所（床）は、のびーでお尻を持ち上げる前の輪郭で決める
+    bots.push(floorRing[kb]);
     roots.push(lerp(top, bot, k === 0 ? 0.6 : 0.56));
   }
   // 体の軸（頭 → お尻）
@@ -441,7 +488,7 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
       let along: number;
       if (front) {
         const hf = cat.headFrame();
-        along = (hf.x - base.x) * ux + (hf.y - base.y) * uy + cat.headRX * 1.2;
+        along = (hf.x - base.x) * ux + (hf.y - base.y) * uy + cat.headRX * 1.6;
       } else {
         along = -b * 0.35;
       }
@@ -628,7 +675,7 @@ function limbPath(ctx: CanvasRenderingContext2D, pts: Pt[], rs: number[], grow: 
   }
 }
 
-function drawTail(ctx: CanvasRenderingContext2D, cat: Cat): void {
+function drawTail(ctx: CanvasRenderingContext2D, cat: Cat, warp: StretchWarp | null = null): void {
   const w = cat.world;
   const coat = cat.coat;
   const sp = cat.species;
@@ -637,6 +684,7 @@ function drawTail(ctx: CanvasRenderingContext2D, cat: Cat): void {
   // 付け根は胴体の少し内側から
   pts.push(lerp({ x: w.x[base], y: w.y[base] }, { x: cat.cx, y: cat.cy }, 0.15));
   for (const i of cat.tail) pts.push({ x: w.x[i], y: w.y[i] });
+  if (warp) for (let k = 0; k < pts.length; k++) pts[k] = warp.apply(pts[k]);
   const n = pts.length;
   // しっぽの揺れ（描画だけ）: 付け根から先へ波が伝わるように、節ごとに少しずつ曲げる。寝ていると先だけぴくっ
   if (cat.wagAmp > 0.002 || cat.tailTwitch > 0.02) {
@@ -898,10 +946,14 @@ function drawFace(
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(angle);
-    if (e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn' || open < 0.12) {
+    if (e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn' || e === 'stretch' || open < 0.12) {
       // 閉じた目
       ctx.beginPath();
-      if (e === 'bliss' || e === 'happy' || e === 'groom') {
+      if (e === 'stretch') {
+        // - - ぎゅっとつぶって横線だけ
+        ctx.moveTo(-erx * 1.05, ery * 0.1);
+        ctx.lineTo(erx * 1.05, ery * 0.1);
+      } else if (e === 'bliss' || e === 'happy' || e === 'groom') {
         // ^ ^ 気持ちよさそう
         ctx.moveTo(-erx, ery * 0.3);
         ctx.quadraticCurveTo(0, -ery * 1.0, erx, ery * 0.3);
