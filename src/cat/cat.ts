@@ -1007,6 +1007,28 @@ export class Cat {
    * 指でつつかれた・かき混ぜられた。目を細めて、寝ていたら起きる。
    * 触られ始めなら true（鳴き声の合図）。
    */
+  /**
+   * 外から気まぐれを起こす（図鑑用）。落ち着いて床にいる猫だけ。
+   * nap: 寝る / wake: 起きる（ときどき、のびー）/ blank: スン… / slowBlink: ゆっくりまばたき / それ以外はアクション
+   */
+  whim(kind: 'groom' | 'yawn' | 'stretch' | 'nap' | 'wake' | 'blank' | 'slowBlink'): void {
+    if (!this.landed || this.held) return;
+    if (kind === 'nap') {
+      if (this.action !== 'none') this.endAction();
+      this.calm = Math.max(this.calm, this.sleepAt - 0.5);
+    } else if (kind === 'wake') {
+      this.calm = Math.min(this.calm, 2);
+      if (Math.random() < 0.6 && this.action === 'none') this.startAction('stretch', 2.4, null);
+    } else if (kind === 'blank') {
+      this.blankTimer = 3 + Math.random() * 3;
+    } else if (kind === 'slowBlink') {
+      this.slowBlinkT = 1e-4;
+    } else if (this.action === 'none') {
+      this.calm = Math.min(Math.max(this.calm, 1.6), this.sleepAt / 2 - 0.1);
+      this.startAction(kind, kind === 'yawn' ? 1.6 : kind === 'stretch' ? 2.4 : 2.5 + Math.random() * 2.5, null);
+    }
+  }
+
   poke(): boolean {
     if (!this.landed) return false;
     const fresh = this.pokeTimer <= 0;
