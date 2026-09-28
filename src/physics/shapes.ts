@@ -357,8 +357,12 @@ export function buildContainer(spec: ShapeSpec, targetArea: number): Container {
     A += p.x * q.y - q.x * p.y;
   }
   let s = Math.sqrt(targetArea / Math.abs(A / 2));
-  // 管は猫が通り抜けられる太さに（容量よりも太さを優先）
-  if (tube) s = Math.min(Math.max(s, TUBE_MIN_W / tube.w), TUBE_MAX_W / tube.w);
+  // 管は猫が通り抜けられる太さに（容量よりも太さを優先）。細すぎる管にはしない。
+  // 2.1 倍を超える大きな面では太さの上限をその分だけ広げて、管ごと容量どおりに大きくする
+  if (tube) {
+    const k = Math.max(1, Math.sqrt(targetArea / (BASE_AREA * 2.1)));
+    s = Math.min(Math.max(s, TUBE_MIN_W / tube.w), (TUBE_MAX_W * k) / tube.w);
+  }
   let y0 = Infinity;
   let y1 = -Infinity;
   for (const p of wall0) {
@@ -406,27 +410,58 @@ export const BASE_AREA = 2.45 * 215 * 215;
  * 現実にはない曲がりくねった管（S字・クランク・螺旋）…と毎回変わる。
  * 大きさ（容量）はだんだん大きくなる。
  */
+/** 1周の面数（12種類の容器をひと巡り） */
+export const CYCLE = 12;
+/** 周ごとの大きさ（面積の倍率）。周の中では変えない。この周を過ぎたら、形も大きさもランダム */
+export const CYCLE_GROWTH = [1.0, 2.0, 3.0, 3.8];
+/** ランダムになってからの大きさの範囲 */
+export const MAX_GROWTH = 3.8;
+
+/** 1周の容器の順番 */
+const ORDER: ShapeSpec[] = [
+  { kind: 'fishbowl', variant: 0.5 },
+  { kind: 'beaker' },
+  { kind: 'flask' },
+  { kind: 'wideBowl' },
+  { kind: 'hexagon' },
+  { kind: 'roundFlask' },
+  { kind: 'hourglass' },
+  { kind: 'diamond' },
+  { kind: 'vase' },
+  { kind: 'sCurve' },
+  { kind: 'crank' },
+  { kind: 'spiral' },
+];
+
+/** 面ごとに決まった乱数（同じ面なら何度呼んでも同じ形・大きさ） */
+function stageRand(stage: number, salt: number): number {
+  let t = (stage * 0x9e3779b1 + salt * 0x85ebca6b) >>> 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+/**
+ * 面の容器。12面で1周し、1〜4周目は同じ順番で12種類を巡る（大きさは周ごとに 1 → 2 → 3 → 3.8 倍）。
+ * 5周目からは形も大きさもランダム（続けて同じ形にはならない）
+ */
 export function stageShape(stage: number): { spec: ShapeSpec; area: number; goal: number } {
-  // 金魚鉢は1面だけ。そのあとは毎回ちがう形
-  const fixed: ShapeSpec[] = [
-    { kind: 'fishbowl', variant: 0.5 },
-    { kind: 'beaker' },
-    { kind: 'flask' },
-    { kind: 'wideBowl' },
-    { kind: 'hexagon' },
-    { kind: 'roundFlask' },
-    { kind: 'hourglass' },
-    { kind: 'diamond' },
-    { kind: 'vase' },
-    { kind: 'sCurve' },
-    { kind: 'crank' },
-    { kind: 'spiral' },
-  ];
-  // 容量はだんだん大きく（上限あり）。後半は少しランダムに揺らす
-  const growth = Math.min(2.1, 1 + 0.13 * (stage - 1));
-  if (stage <= fixed.length) return { spec: fixed[stage - 1], area: BASE_AREA * growth, goal: FILL_GOALS[fixed[stage - 1].kind] };
-  // 全部見終わったら、金魚鉢（縦横比いろいろ）も含めて均等にランダム
+  const cycle = Math.floor((stage - 1) / CYCLE);
+  if (cycle < CYCLE_GROWTH.length) {
+    const spec = ORDER[(stage - 1) % CYCLE];
+    return { spec, area: BASE_AREA * CYCLE_GROWTH[cycle], goal: FILL_GOALS[spec.kind] };
+  }
   const kinds = Object.keys(SHAPE_NAMES) as ShapeKind[];
-  const spec: ShapeSpec = { kind: kinds[Math.floor(Math.random() * kinds.length)], variant: Math.random() };
-  return { spec, area: BASE_AREA * growth * (0.85 + Math.random() * 0.25), goal: FILL_GOALS[spec.kind] };
+  // ランダムになった最初の面から順に、前の面と同じ形を避けて決める
+  const from = CYCLE_GROWTH.length * CYCLE + 1;
+  let prev = -1;
+  let k = 0;
+  for (let st = from; st <= stage; st++) {
+    k = Math.floor(stageRand(st, 1) * kinds.length);
+    if (k === prev) k = (k + 1 + Math.floor(stageRand(st, 2) * (kinds.length - 1))) % kinds.length;
+    prev = k;
+  }
+  const growth = 1 + stageRand(stage, 3) * (MAX_GROWTH - 1);
+  const spec: ShapeSpec = { kind: kinds[k], variant: stageRand(stage, 4) };
+  return { spec, area: BASE_AREA * growth, goal: FILL_GOALS[spec.kind] };
 }
