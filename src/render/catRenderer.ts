@@ -464,11 +464,13 @@ function drawLegs(ctx: CanvasRenderingContext2D, cat: Cat, ring: Pt[], time: num
     // 着地後: 前脚は胸の下から手先を少しのぞかせ、後ろ脚はお腹の下にたたむ（粒子の位置と混ぜる）
     const rest = 1 - lp;
     if (rest > 0.001 && gw0(front, groom) < 1) {
-      const fwd = front ? 0.42 : 0.3;
-      const dn = front ? 0.95 : 0.78;
+      // 香箱座りでは、手先も足先もお腹の下へしまって見えなくする
+      const lo = cat.loaf;
+      const fwd = (front ? 0.42 : 0.3) * (1 - lo) + (front ? 0.05 : 0) * lo;
+      const dn = (front ? 0.95 : 0.78) * (1 - lo) + (front ? 0.15 : 0) * lo;
       const tx = root.x - axX * b * fwd + bell.x * b * dn;
       const ty = root.y - axY * b * fwd + bell.y * b * dn;
-      const m = rest * 0.7 * (1 - gw0(front, groom));
+      const m = rest * (0.7 + 0.3 * lo) * (1 - gw0(front, groom));
       paw = { x: paw.x + (tx - paw.x) * m, y: paw.y + (ty - paw.y) * m };
     }
     // のびー: 前脚は前へまっすぐ伸ばし、後ろ脚は少し後ろへ踏ん張る

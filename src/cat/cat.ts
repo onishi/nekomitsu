@@ -808,6 +808,13 @@ export class Cat {
     // 着地したら足はふにゃっと（足がバネになって跳ねないように）
     for (const s of this.footSlots) this.bodyCluster.stiff[s] = this.landed ? 0.1 : 0.35;
     this.bodyCluster.stiff[this.footSlots[0]] += 0.35 * this.groomPose;
+    // 香箱座り: 落ち着いた猫の半分くらいは、起きていても手足をお腹の下にしまって座る（描画だけ）
+    if (this.calm < 1) this.loafy = false;
+    else if (!this.loafDecided) this.loafy = Math.random() < 0.5;
+    this.loafDecided = this.calm >= 1;
+    const upright = Math.abs(wrapAngle(this.bodyCluster.angle)) < 0.5;
+    const loafTarget = this.loafy && this.landed && upright && this.action === 'none' && this.calm > 1.5 ? 1 : 0;
+    this.loaf += (loafTarget - this.loaf) * Math.min(1, dt * 2.5);
     const tailTarget = this.landed ? smooth(1.5, 4, this.calm) : 0;
     this.tailPose += (tailTarget - this.tailPose) * Math.min(1, dt * 1.5);
     this.updatePoseRest();
@@ -864,6 +871,8 @@ export class Cat {
     else if (this.calm > this.sleepAt) e = 'sleep';
     else if (this.calm > this.sleepAt / 2) e = 'sleepy';
     else e = this.stoic || this.blankTimer > 0 ? 'blank' : 'normal';
+    // 香箱座りの猫は目を細めて、くつろいだ顔
+    if (e === 'normal' && this.loaf > 0.6) e = 'sleepy';
     this.blankTimer -= dt;
     if (this.grumpy && this.landed) {
       // 不機嫌な猫: 触られたり舐められたりするとイカ耳、ふだんはジト目。クリアしても機嫌は直らない
@@ -1152,6 +1161,10 @@ export class Cat {
 
   /** 描画用: 線の目（- -）で寝ている */
   sleepFlat = false;
+  /** 描画用: 香箱座り（手足をしまう）0..1 */
+  loaf = 0;
+  private loafy = false;
+  private loafDecided = false;
   /** 描画用: 身につけている小物 */
   accessory: Accessory | null = null;
   /** 動じない性格（押されても潰されても無表情） */

@@ -357,6 +357,8 @@ interface Mat {
 }
 
 const MAT: Record<Exclude<Vessel, 'glass'>, Mat> = {
+  mug: { t: 0.055, outer: '#f5eee1', inner: '#fbf7ef', edge: '#9d8a70' },
+  boot: { t: 0.05, outer: '#f2c230', inner: '#f6e3a6', edge: '#9a7415' },
   oke: { t: 0.055, outer: '#c4925c', inner: '#e2bf8a', edge: '#7a5230' },
   kago: { t: 0.05, outer: '#c9a066', inner: '#e0c08a', edge: '#86602f' },
   danbo: { t: 0.034, outer: '#c99d63', inner: '#dcb680', edge: '#8a643a' },
@@ -449,7 +451,7 @@ function matBack(ctx: CanvasRenderingContext2D, b: Container, vessel: Exclude<Ve
       ctx.lineTo(x, yb + 10);
       ctx.stroke();
     }
-  } else {
+  } else if (vessel === 'donabe') {
     // 土鍋の内側: 土の粒
     for (let i = 0; i < 160; i++) {
       ctx.fillStyle = hash(i, 3) < 0.5 ? 'rgba(120,90,60,0.22)' : 'rgba(255,255,255,0.35)';
@@ -573,7 +575,19 @@ function matFront(ctx: CanvasRenderingContext2D, b: Container, vessel: Exclude<V
     ctx.strokeStyle = 'rgba(120,85,45,0.6)';
     ctx.lineWidth = 1;
     ctx.stroke();
-  } else {
+  } else if (vessel === 'boot') {
+    // 長靴: 口のまわりの帯と、黒いゴム底
+    ctx.fillStyle = '#e3a91c';
+    ctx.fillRect(-hw - T * 3, yo - T, hw * 2 + T * 6, Math.max(T * 2, R * 0.12));
+    ctx.fillStyle = '#5b4632';
+    ctx.fillRect(-hw * 3, yb + T * 0.15, hw * 6, T * 3);
+    along(T * 0.5, 'rgba(255,255,255,0.25)', T * 0.25);
+  } else if (vessel === 'mug') {
+    // マグカップ: 釉薬のつやと、青い線
+    along(T * 0.4, 'rgba(255,255,255,0.5)', T * 0.25);
+    ctx.fillStyle = '#6f9fcf';
+    ctx.fillRect(-hw * 3, yo + (yb - yo) * 0.14, hw * 6, Math.max(3, R * 0.03));
+  } else if (vessel === 'donabe') {
     // 釉薬のつや
     along(T * 0.62, 'rgba(255,230,200,0.14)', T * 0.3);
     for (let i = 0; i < 90; i++) {

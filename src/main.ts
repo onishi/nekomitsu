@@ -61,14 +61,22 @@ function layout(): void {
   // 見せたい範囲: 吊るされた猫〜テーブル
   const top = game.dropY - Math.max(R * 0.38, 90);
   const bottom = tableWorldY(b, vessel()) + R * 0.1;
-  const halfW = Math.max(b.halfW * 1.06, 200);
+  // 左右非対称の容器（マグカップの取っ手・長靴のつま先）は、容器全体が真ん中に来るようにずらす
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  for (const p of b.wall) {
+    x0 = Math.min(x0, p.x);
+    x1 = Math.max(x1, p.x);
+  }
+  const cxw = (x0 + x1) / 2;
+  const halfW = Math.max(((x1 - x0) / 2) * 1.06, 200);
   const hudH = 56;
   const scale = Math.min(w / (halfW * 2), (h - hudH) / (bottom - top));
   view.scale = scale;
   view.dpr = dpr;
   view.w = w;
   view.h = h;
-  view.ox = w / 2;
+  view.ox = w / 2 - cxw * scale;
   // 下寄せ（テーブルが画面下に来る）
   view.oy = h - (bottom - 0) * scale - Math.max(0, (h - hudH - (bottom - top) * scale) * 0.35);
 }

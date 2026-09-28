@@ -16,7 +16,9 @@ export type ShapeKind =
   | 'vase'
   | 'sCurve'
   | 'crank'
-  | 'spiral';
+  | 'spiral'
+  | 'mug'
+  | 'boot';
 
 export const SHAPE_NAMES: Record<ShapeKind, string> = {
   fishbowl: '金魚鉢',
@@ -31,6 +33,52 @@ export const SHAPE_NAMES: Record<ShapeKind, string> = {
   sCurve: 'S字',
   crank: 'クランク',
   spiral: '螺旋',
+  mug: 'マグカップ',
+  boot: '長靴',
+};
+
+/** 左右対称でない形（口の左端 → 底 → 口の右端の内壁をそのまま決める）。口は x=0 を中心にする */
+const ASYM: Partial<Record<ShapeKind, () => Pt[]>> = {
+  // マグカップ: 太い筒の右に、猫が入れる太い取っ手。取っ手は上の付け根だけでカップとつながり、
+  // C の字に回り込んで下の端は閉じている（カップが付け根まで埋まると、猫が取っ手へ流れ込んで下から溜まる）
+  mug: () =>
+    roundCorners(
+      [
+        { x: -0.84, y: -0.98 },
+        { x: -0.8, y: 0.92 },
+        { x: 0.8, y: 0.92 },
+        { x: 0.84, y: -0.14 },
+        { x: 1.02, y: -0.14 },
+        { x: 1.06, y: 0.01 },
+        { x: 1.02, y: 0.16 },
+        { x: 0.96, y: 0.16 },
+        { x: 0.96, y: 0.66 },
+        { x: 1.28, y: 0.66 },
+        { x: 1.5, y: 0.44 },
+        { x: 1.52, y: -0.22 },
+        { x: 1.34, y: -0.64 },
+        { x: 0.84, y: -0.64 },
+        { x: 0.84, y: -0.98 },
+      ],
+      0.14,
+    ),
+  // 長靴: 縦の筒（口）の下から、つま先が右へ伸びる
+  boot: () =>
+    roundCorners(
+      [
+        { x: -0.42, y: -1.1 },
+        { x: -0.44, y: 0.55 },
+        { x: -0.4, y: 0.92 },
+        { x: 0.95, y: 0.92 },
+        { x: 1.22, y: 0.82 },
+        { x: 1.26, y: 0.55 },
+        { x: 1.0, y: 0.3 },
+        { x: 0.55, y: 0.14 },
+        { x: 0.42, y: -0.1 },
+        { x: 0.42, y: -1.1 },
+      ],
+      0.16,
+    ),
 };
 
 /** 曲がりくねった管の形（現実にはない容器）。中心線に沿って一定の太さの管を作る */
@@ -340,8 +388,11 @@ function rightHalf(spec: ShapeSpec): Pt[] {
 export function buildContainer(spec: ShapeSpec, targetArea: number): Container {
   const tube = TUBES[spec.kind];
   let wall0: Pt[];
+  const asym = ASYM[spec.kind];
   if (tube) {
     wall0 = tubeWall(tube.center(), tube.w);
+  } else if (asym) {
+    wall0 = asym();
   } else {
     const right = rightHalf(spec);
     const left = right
@@ -396,6 +447,8 @@ export const FILL_GOALS: Record<ShapeKind, number> = {
   sCurve: 0.93, // 95 → 95（管は口が細く、盛っても量がほとんど増えない）
   crank: 0.93, // 92 → 95
   spiral: 0.94, // 94 → 96
+  mug: 0.97,
+  boot: 0.95,
 };
 
 /** 管の太さ（ワールド座標）。猫1匹より少し太い */
@@ -433,6 +486,11 @@ const ORDER: ShapeSpec[] = [
   { kind: 'spiral' },
 ];
 
+const LATER_SWAP: Partial<Record<ShapeKind, ShapeSpec>> = {
+  beaker: { kind: 'mug' },
+  diamond: { kind: 'boot' },
+};
+
 /** 面ごとに決まった乱数（同じ面なら何度呼んでも同じ形・大きさ） */
 function stageRand(stage: number, salt: number): number {
   let t = (stage * 0x9e3779b1 + salt * 0x85ebca6b) >>> 0;
@@ -448,7 +506,9 @@ function stageRand(stage: number, salt: number): number {
 export function stageShape(stage: number): { spec: ShapeSpec; area: number; goal: number } {
   const cycle = Math.floor((stage - 1) / CYCLE);
   if (cycle < CYCLE_GROWTH.length) {
-    const spec = ORDER[(stage - 1) % CYCLE];
+    let spec = ORDER[(stage - 1) % CYCLE];
+    // 2周目からは、ビーカーの代わりにマグカップ、ひし形の代わりに長靴
+    if (cycle >= 1) spec = LATER_SWAP[spec.kind] ?? spec;
     return { spec, area: BASE_AREA * CYCLE_GROWTH[cycle], goal: FILL_GOALS[spec.kind] };
   }
   const kinds = Object.keys(SHAPE_NAMES) as ShapeKind[];

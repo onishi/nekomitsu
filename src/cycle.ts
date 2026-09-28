@@ -6,7 +6,7 @@ import { CYCLE, isTube, type ShapeKind } from './physics/shapes';
 import { themeForCycle, type ThemeKey } from './render/themes';
 
 /** 容器の素材 */
-export type Vessel = 'glass' | 'oke' | 'kago' | 'danbo' | 'donabe';
+export type Vessel = 'glass' | 'oke' | 'kago' | 'danbo' | 'donabe' | 'mug' | 'boot';
 
 /** テーマごとの容器（細い管はどのテーマでもガラス） */
 const VESSEL: Partial<Record<ThemeKey, Vessel>> = {
@@ -18,6 +18,8 @@ const VESSEL: Partial<Record<ThemeKey, Vessel>> = {
 
 export function vesselFor(theme: ThemeKey, kind: string): Vessel {
   if (isTube(kind as ShapeKind)) return 'glass';
+  // マグカップ・長靴はどのテーマでもその素材
+  if (kind === 'mug' || kind === 'boot') return kind;
   return VESSEL[theme] ?? 'glass';
 }
 
