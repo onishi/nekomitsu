@@ -85,6 +85,8 @@ export class Game {
   dropX = 0;
   private dropVX = 0;
   private spawnTimer = 0;
+  /** 進み方の速さ（オートの倍速モードで 2）。次の猫が出てくるまでの間だけ縮める（落ちる速さは同じ） */
+  pace = 1;
   /** 吊るされた猫の登場アニメ 0..1 */
   private heldIntro = 1;
   /** 吊るしている猫を口の幅に合わせて細くする倍率 */
@@ -420,7 +422,7 @@ export class Game {
     c.release(this.dropVX * 0.3, 60);
     this.cats.push(c);
     this.held = null;
-    this.spawnTimer = 0.55;
+    this.spawnTimer = 0.55 / this.pace;
     this.dropsThisStage++;
     // ニャー（小さい猫は高く、大きい猫は低く）
     const sp = c.species;
@@ -444,7 +446,7 @@ export class Game {
       const tx = this.clampX(this.targetX, c);
       this.dropX += (tx - this.dropX) * Math.min(1, dt * 12);
       this.dropVX = (this.dropX - prev) / dt;
-      this.heldIntro = Math.min(1, this.heldIntro + dt * 3.2);
+      this.heldIntro = Math.min(1, this.heldIntro + dt * 3.2 * this.pace);
       const e = 1 - Math.pow(1 - this.heldIntro, 3);
       const y = this.dropY - (1 - e) * 200;
       // 移動に合わせてぶらーんと傾く

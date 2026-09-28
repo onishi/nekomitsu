@@ -222,16 +222,40 @@ const autoBtn = $<HTMLButtonElement>('autoBtn');
 let auto = false;
 let autoTimer = 0;
 let autoAim: number | null = null;
-function setAuto(on: boolean): void {
+/** 隠しモード: オートのボタンを長押しすると倍速（次の猫を落とすまでの間を半分に。落ちる速さは同じ） */
+let autoFast = false;
+function setAuto(on: boolean, fast = false): void {
   auto = on;
+  autoFast = on && fast;
+  game.pace = autoFast ? 2 : 1;
   autoAim = null;
   autoTimer = 0.4;
   autoBtn.setAttribute('aria-pressed', String(on));
+  autoBtn.classList.toggle('fast', autoFast);
   autoBtn.setAttribute('aria-label', on ? 'オートモードを止める' : 'オートモードにする');
   if (on) hint.classList.add('fade');
 }
 setAuto(false);
+// 長押し（0.6秒）で倍速のオート。長押しのあとのクリックは無視する
+let autoPressTimer = 0;
+let autoLongPressed = false;
+autoBtn.addEventListener('pointerdown', () => {
+  autoLongPressed = false;
+  clearTimeout(autoPressTimer);
+  autoPressTimer = window.setTimeout(() => {
+    autoLongPressed = true;
+    game.sound.unlock();
+    setAuto(true, true);
+  }, 600);
+});
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) autoBtn.addEventListener(ev, () => clearTimeout(autoPressTimer));
+autoBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 autoBtn.addEventListener('click', () => {
+  if (autoLongPressed) {
+    autoLongPressed = false;
+    autoBtn.blur();
+    return;
+  }
   game.sound.unlock();
   setAuto(!auto);
   autoBtn.blur();
@@ -241,7 +265,7 @@ function updateAuto(dt: number): void {
   autoTimer -= dt;
   if (game.phase === 'cleared') {
     // クリアの余韻を少し見せてから次の面へ
-    if (clearShown && performance.now() - clearShownAt > 3200) goNext();
+    if (clearShown && performance.now() - clearShownAt > (autoFast ? 1600 : 3200)) goNext();
     return;
   }
   if (game.phase === 'gameover') {
@@ -256,11 +280,11 @@ function updateAuto(dt: number): void {
     const w = game.bowl.openHalfW;
     autoAim = (Math.random() * 2 - 1) * w;
     game.targetX = autoAim;
-    autoTimer = 0.45 + Math.random() * 0.35;
+    autoTimer = (0.45 + Math.random() * 0.35) / game.pace;
   } else if (game.canDrop) {
     game.drop();
     autoAim = null;
-    autoTimer = 0.5 + Math.random() * 0.9;
+    autoTimer = (0.5 + Math.random() * 0.9) / game.pace;
   }
 }
 

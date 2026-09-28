@@ -277,6 +277,27 @@ button.toggle[aria-pressed='true'] {
   color: #fff;
 }
 
+/* 隠しモード（長押し）: 倍速のオート */
+button.toggle {
+  position: relative;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+button.toggle.fast::after {
+  content: '×2';
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 6px;
+  background: #fff;
+  color: #e5854f;
+  box-shadow: 0 1px 3px rgba(90, 60, 30, 0.2);
+}
+
 
 button {
   font: inherit;
