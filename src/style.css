@@ -395,6 +395,44 @@ button.icon:active {
   opacity: 0;
 }
 
+/* 1日の旅: 日の始まり（何日目・特集）と、場所が変わったときの札 */
+#dayBanner {
+  position: fixed;
+  left: 50%;
+  top: calc(max(12px, env(safe-area-inset-top)) + 58px);
+  transform: translate(-50%, -6px);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 6px 16px;
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+
+#dayBanner.show {
+  opacity: 0.95;
+  transform: translate(-50%, 0);
+}
+
+#dayBanner .day {
+  font-size: 15px;
+  font-weight: 700;
+  color: #d9774a;
+}
+
+#dayBanner .day:empty {
+  display: none;
+}
+
+#dayBanner .place {
+  font-size: 13px;
+}
+
 #clear,
 #over {
   position: fixed;

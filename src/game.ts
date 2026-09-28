@@ -6,8 +6,8 @@ import type { Container } from './physics/container';
 import { buildContainer, SHAPE_NAMES, stageShape, type ShapeKind, type ShapeSpec } from './physics/shapes';
 import { World } from './physics/world';
 import { Keshi, keshiSpecies } from './keshi';
-import { BASE_AREA, CYCLE, FILL_GOALS } from './physics/shapes';
-import { themeKeyForStage } from './cycle';
+import { BASE_AREA, CYCLE, FILL_GOALS, MAX_GROWTH } from './physics/shapes';
+import { featureForStage, themeKeyForStage, type Feature } from './cycle';
 import type { ThemeKey } from './render/themes';
 import type { Accessory } from './cat/cat';
 
@@ -20,6 +20,8 @@ const ACCESSORY: Partial<Record<ThemeKey, Accessory>> = {
   sento: 'towel',
   autumn: 'scarf',
 };
+/** おめかしの日に、小物のない場所で身につけるもの */
+const DRESS: Accessory[] = ['flower', 'scarf', 'towel', 'straw'];
 
 
 /** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
@@ -261,6 +263,8 @@ export class Game {
     if (!keepShape || n !== this.stage) {
       this.shape = stageShape(n);
       if (forcedShape) this.shape = { spec: { kind: forcedShape, variant: 0.5 }, area: this.shape.area, goal: FILL_GOALS[forcedShape] };
+      // 大きな器の日: いちばん大きな容器
+      if (featureForStage(n) === 'big') this.shape = { ...this.shape, area: Math.max(this.shape.area, BASE_AREA * MAX_GROWTH) };
     }
     // 表示していた猫は消さずに次へ持ち越す（必ず落とせる）
     const carry = this.held
@@ -297,6 +301,11 @@ export class Game {
     this.startMode(this.mode);
   }
 
+  /** この面の特集（ねこみつの2周目から。子猫の日・黒猫の日…） */
+  get feature(): Feature | null {
+    return this.keshi ? null : featureForStage(this.stage);
+  }
+
   nextStage(): void {
     this.startStage(this.stage + 1);
   }
@@ -306,6 +315,10 @@ export class Game {
     const kinds = KINDS;
     // 最初の1匹は「ふつうの猫」で核の体験を確実に
     if (this.dropsThisStage === 0 && this.stage === 1) return SPECIES.standard;
+    // 子猫の日・ふわふわの日は、半分くらいがその猫
+    const f = this.feature;
+    if (f === 'kitten' && Math.random() < 0.5) return SPECIES.kitten;
+    if (f === 'fluffy' && Math.random() < 0.5) return SPECIES.fluffy;
     let tot = 0;
     for (const k of kinds) tot += SPECIES[k].weight;
     let r = Math.random() * tot;
@@ -319,6 +332,11 @@ export class Game {
   private pickCoat(): Coat {
     if (this.keshi) return this.keshi.pickCoat();
     if (forcedCoat) return forcedCoat;
+    // 黒猫の日: 7割くらいが黒猫・ハチワレ・牛柄
+    if (this.feature === 'black' && Math.random() < 0.7) {
+      const dark = COATS.filter((c) => c.key === 'kuro' || c.key === 'hachi' || c.key === 'ushi');
+      if (dark.length) return dark[Math.floor(Math.random() * dark.length)];
+    }
     for (let tries = 0; tries < 10; tries++) {
       const c = COATS[Math.floor(Math.random() * COATS.length)];
       if (!this.lastCoats.includes(c.key)) {
@@ -341,9 +359,14 @@ export class Game {
     c.stoic = carry ? carry.stoic : forcedStoic ?? (!grumpy && Math.random() < 0.15);
     // こたつの部屋では、ぬくぬくしてすぐ眠くなる
     if (!this.keshi && themeKeyForStage(this.stage) === 'kotatsu') c.sleepiness = 0.45;
-    // 季節の小物（3匹に1匹くらい）
-    const acc = this.keshi ? undefined : ACCESSORY[themeKeyForStage(this.stage)];
-    if (acc && Math.random() < 0.3) c.accessory = acc;
+    // おねむの日: みんな眠くなりやすい
+    if (this.feature === 'sleepy') c.sleepiness *= 0.5;
+    // 季節の小物（3匹に1匹くらい）。おめかしの日はみんな（小物のない場所では花かんむり・マフラー・手ぬぐいのどれか）
+    if (!this.keshi) {
+      const dress = this.feature === 'dressup';
+      const acc = ACCESSORY[themeKeyForStage(this.stage)] ?? (dress ? DRESS[Math.floor(Math.random() * DRESS.length)] : undefined);
+      if (acc && (dress || Math.random() < 0.3)) c.accessory = acc;
+    }
     this.dropX = this.clampX(this.targetX, c);
     this.held = c;
     this.heldIntro = 0;

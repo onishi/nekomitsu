@@ -1149,13 +1149,3 @@ const sento: Theme = {
 };
 
 export const THEMES: Record<ThemeKey, Theme> = { room, garden, meadow, rooftop, nightWindow, kotatsu, sakura, beach, space, rain, autumn, aquarium, sento };
-
-/** 5周目から巡るテーマ */
-const LATER: ThemeKey[] = ['nightWindow', 'autumn', 'kotatsu', 'rain', 'sakura', 'sento', 'beach', 'aquarium', 'space'];
-
-/** ねこみつの周（0 始まり）のテーマ: 部屋 → 庭先 → 草原 → 屋根の上 → そのあとは夜の窓辺・紅葉の山寺・こたつ・雨の窓辺・桜・銭湯・海辺・水族館・宇宙を巡る */
-export function themeForCycle(cycle: number): Theme {
-  const first: ThemeKey[] = ['room', 'garden', 'meadow', 'rooftop'];
-  if (cycle < first.length) return THEMES[first[cycle]];
-  return THEMES[LATER[(cycle - first.length) % LATER.length]];
-}

@@ -5,8 +5,8 @@ import { drawCat, strokeCatSilhouette } from './render/catRenderer';
 import { Effects } from './render/effects';
 import { CYCLE } from './physics/shapes';
 import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
-import { THEMES, themeForCycle, type Theme } from './render/themes';
-import { fireflyAmount, starAmount, timeTint, vesselFor, type Tint, type Vessel } from './cycle';
+import { THEMES, type Theme } from './render/themes';
+import { dayOf, FEATURE_NAMES, featureForStage, fireflyAmount, hourOf, starAmount, themeKeyForStage, timeTint, vesselFor, type Tint, type Vessel } from './cycle';
 import { Petals } from './render/petals';
 import { EVENTS, type SceneEvent } from './render/events';
 
@@ -528,7 +528,7 @@ function themeLayers(): { theme: Theme; alpha: number }[] {
   const now = performance.now();
   const dt = Math.min(0.1, (now - themeLast) / 1000);
   themeLast = now;
-  const want = game.mode === 'keshi' ? THEMES.room : themeForCycle(Math.floor((game.stage - 1) / CYCLE));
+  const want = game.mode === 'keshi' ? THEMES.room : THEMES[themeKeyForStage(game.stage)];
   if (want !== themeNow) {
     themePrev = themeNow;
     themeNow = want;
@@ -552,7 +552,7 @@ function themeLayers(): { theme: Theme; alpha: number }[] {
 
 /** 今の面の容器の素材（ねこみつの周のテーマで決まる。ねこけしはいつもガラス） */
 function vessel(): Vessel {
-  return game.mode === 'keshi' ? 'glass' : vesselFor(themeForCycle(Math.floor((game.stage - 1) / CYCLE)).key, game.bowl.kind);
+  return game.mode === 'keshi' ? 'glass' : vesselFor(themeKeyForStage(game.stage), game.bowl.kind);
 }
 
 // 一日の時間（周の中で朝 → 昼 → 夕方 → 夜）。面が変わると約2.5秒かけて色が移る
@@ -624,7 +624,32 @@ function updateSceneEvent(gy: number): void {
   }
 }
 
+// 1日の旅（2周目から）: 日の始まりに「2日目・子猫の日」、場所が変わるたびに「昼・海辺」の札を少し出す
+const dayBanner = $('dayBanner');
+const dayLine = dayBanner.querySelector('.day')!;
+const placeLine = dayBanner.querySelector('.place')!;
+const SLOT_NAMES = ['朝', '昼', '夕方', '夜'];
+let bannerStage = 0;
+let bannerTimer = 0;
+function updateDayBanner(): void {
+  if (game.mode !== 'mitsu' || game.stage === bannerStage) return;
+  const first = bannerStage === 0;
+  bannerStage = game.stage;
+  const st = game.stage;
+  if (st <= CYCLE) return;
+  const h = hourOf(st);
+  // 新しい場所に着いたとき（途中の面から始めたときも）
+  if (h % 3 !== 0 && !first) return;
+  const f = featureForStage(st);
+  dayLine.textContent = h === 0 || first ? `${dayOf(st)}日目${f ? ` ・ ${FEATURE_NAMES[f]}` : ''}` : '';
+  placeLine.textContent = `${SLOT_NAMES[Math.floor(h / 3)]} ・ ${THEMES[themeKeyForStage(st)].name}`;
+  dayBanner.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = window.setTimeout(() => dayBanner.classList.remove('show'), 3500);
+}
+
 function render(): void {
+  updateDayBanner();
   const b = game.bowl;
   const ves = vessel();
   const amb = ambient();
