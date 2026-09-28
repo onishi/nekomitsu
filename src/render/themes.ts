@@ -4,7 +4,20 @@
  */
 import type { View } from './scene';
 
-export type ThemeKey = 'room' | 'garden' | 'meadow' | 'rooftop' | 'nightWindow' | 'kotatsu' | 'sakura' | 'beach' | 'space';
+export type ThemeKey =
+  | 'room'
+  | 'garden'
+  | 'meadow'
+  | 'rooftop'
+  | 'nightWindow'
+  | 'kotatsu'
+  | 'sakura'
+  | 'beach'
+  | 'space'
+  | 'rain'
+  | 'autumn'
+  | 'aquarium'
+  | 'sento';
 
 export interface Theme {
   key: ThemeKey;
@@ -729,12 +742,418 @@ const space: Theme = {
   },
 };
 
-export const THEMES: Record<ThemeKey, Theme> = { room, garden, meadow, rooftop, nightWindow, kotatsu, sakura, beach, space };
+// --- 雨の日の窓辺 ---
+const rain: Theme = {
+  key: 'rain',
+  name: '雨の日の窓辺',
+  dark: false,
+  top: '#aeb6c0',
+  draw(ctx, v, gy, t) {
+    const { w, h } = v;
+    // 壁
+    ctx.fillStyle = vgrad(ctx, 0, gy, [
+      [0, '#b7bec7'],
+      [1, '#c9ced4'],
+    ]);
+    ctx.fillRect(0, 0, w, gy);
+    // 窓（外は雨にけむる街）
+    const wx0 = w * 0.08;
+    const wx1 = w * 0.92;
+    const wy0 = Math.max(70, gy * 0.1);
+    const wy1 = gy * 0.8;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+    ctx.clip();
+    ctx.fillStyle = vgrad(ctx, wy0, wy1, [
+      [0, '#7f8b99'],
+      [1, '#a9b3bd'],
+    ]);
+    ctx.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+    // 遠くのビル（ぼんやり）
+    for (let k = 0; k < 9; k++) {
+      const bw = 30 + rnd(k, 70) * 50;
+      const bh = (wy1 - wy0) * (0.2 + rnd(k, 71) * 0.4);
+      const bx = wx0 + ((k + rnd(k, 72) * 0.5) / 9) * (wx1 - wx0);
+      ctx.fillStyle = `rgba(95,108,122,${0.35 + rnd(k, 73) * 0.2})`;
+      ctx.fillRect(bx, wy1 - bh, bw, bh);
+    }
+    // 降る雨（斜めの線）
+    ctx.strokeStyle = 'rgba(230,238,245,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 90; i++) {
+      const sp = 500 + rnd(i, 74) * 300;
+      const y = wy0 + ((((rnd(i, 75) * (wy1 - wy0) + t * sp) % (wy1 - wy0)) + (wy1 - wy0)) % (wy1 - wy0));
+      const x = wx0 + rnd(i, 76) * (wx1 - wx0) - (y - wy0) * 0.12;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 3, y + 14);
+    }
+    ctx.stroke();
+    // ガラスをつたう雨粒
+    for (let i = 0; i < 26; i++) {
+      const sp = 8 + rnd(i, 77) * 30;
+      const y = wy0 + ((((rnd(i, 78) * (wy1 - wy0) + t * sp) % (wy1 - wy0)) + (wy1 - wy0)) % (wy1 - wy0));
+      const x = wx0 + rnd(i, 79) * (wx1 - wx0);
+      const r = 2 + rnd(i, 80) * 2.5;
+      ctx.fillStyle = 'rgba(235,242,248,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * 0.8, r, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(235,242,248,0.25)';
+      ctx.lineWidth = r * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x, y - r - sp * 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // 窓枠
+    ctx.strokeStyle = '#f2efe8';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo((wx0 + wx1) / 2, wy0);
+    ctx.lineTo((wx0 + wx1) / 2, wy1);
+    ctx.stroke();
+    // 窓台と床
+    ctx.fillStyle = '#e8e2d6';
+    ctx.fillRect(0, gy - 6, w, 8);
+    ctx.fillStyle = vgrad(ctx, gy, h, [
+      [0, '#9c8a76'],
+      [1, '#75634f'],
+    ]);
+    ctx.fillRect(0, gy + 2, w, h - gy);
+    woodGrain(ctx, w, gy, h, 'rgba(60,40,20,0.12)');
+  },
+};
+
+// --- 紅葉の山寺 ---
+const autumn: Theme = {
+  key: 'autumn',
+  name: '紅葉の山寺',
+  dark: false,
+  top: '#f6e2c8',
+  draw(ctx, v, gy, t) {
+    const { w, h } = v;
+    ctx.fillStyle = vgrad(ctx, 0, gy, [
+      [0, '#cfe4f0'],
+      [0.7, '#f6e6cf'],
+      [1, '#f3dcc0'],
+    ]);
+    ctx.fillRect(0, 0, w, gy);
+    // 遠くの山（紅葉）
+    for (let layer = 0; layer < 2; layer++) {
+      const base = gy * (0.55 + layer * 0.15);
+      ctx.fillStyle = layer === 0 ? '#d9a27a' : '#c9754f';
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      for (let x = 0; x <= w + 20; x += 20) ctx.lineTo(x, base - Math.sin(x * 0.012 + layer * 2) * 30 - Math.sin(x * 0.031 + layer) * 12);
+      ctx.lineTo(w, gy);
+      ctx.fill();
+      // 木々のこんもり
+      for (let k = 0; k < 16; k++) {
+        const x = rnd(k, 90 + layer) * w;
+        const y = base - Math.sin(x * 0.012 + layer * 2) * 30 + 8;
+        ctx.fillStyle = ['#e0572f', '#f0a030', '#d93e2c', '#e8c040'][k % 4];
+        ctx.globalAlpha = layer === 0 ? 0.55 : 0.85;
+        ctx.beginPath();
+        ctx.arc(x, y, 14 + rnd(k, 92) * 12, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+    // お寺の屋根（右奥）
+    const rx = w * 0.8;
+    const ry = gy * 0.62;
+    ctx.fillStyle = '#5a4a44';
+    ctx.beginPath();
+    ctx.moveTo(rx - 90, ry + 18);
+    ctx.quadraticCurveTo(rx - 40, ry + 6, rx, ry - 26);
+    ctx.quadraticCurveTo(rx + 40, ry + 6, rx + 90, ry + 18);
+    ctx.lineTo(rx + 70, ry + 22);
+    ctx.lineTo(rx - 70, ry + 22);
+    ctx.fill();
+    ctx.fillStyle = '#b4453a';
+    ctx.fillRect(rx - 55, ry + 22, 110, gy * 0.12);
+    ctx.fillStyle = '#e9dcc4';
+    for (let k = 0; k < 4; k++) ctx.fillRect(rx - 46 + k * 26, ry + 28, 16, gy * 0.12 - 10);
+    // 石灯籠（左）
+    const lx = w * 0.12;
+    ctx.fillStyle = '#a8a39a';
+    ctx.fillRect(lx - 5, gy - 60, 10, 50);
+    ctx.fillRect(lx - 16, gy - 12, 32, 12);
+    ctx.fillRect(lx - 14, gy - 78, 28, 20);
+    ctx.fillStyle = 'rgba(255,220,150,0.8)';
+    ctx.fillRect(lx - 6, gy - 73, 12, 10);
+    ctx.fillStyle = '#8f8a82';
+    ctx.beginPath();
+    ctx.moveTo(lx - 22, gy - 78);
+    ctx.lineTo(lx, gy - 94);
+    ctx.lineTo(lx + 22, gy - 78);
+    ctx.fill();
+    // 石畳の地面
+    ctx.fillStyle = vgrad(ctx, gy, h, [
+      [0, '#cdbfa8'],
+      [1, '#a89880'],
+    ]);
+    ctx.fillRect(0, gy, w, h - gy);
+    ctx.strokeStyle = 'rgba(110,90,70,0.2)';
+    ctx.lineWidth = 1.5;
+    for (let y = gy + 18; y < h; y += 26) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+      for (let x = ((y / 26) % 2) * 30; x < w; x += 60) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + 26);
+        ctx.stroke();
+      }
+    }
+    // 舞い落ちる紅葉
+    for (let i = 0; i < 26; i++) {
+      const sp = 16 + rnd(i, 95) * 16;
+      const yy = ((rnd(i, 96) * h + t * sp) % (h + 40)) - 20;
+      const xx = ((rnd(i, 97) * w + Math.sin(t * 0.7 + i) * 30) % (w + 40)) - 20;
+      mapleLeaf(ctx, xx, yy, 5 + rnd(i, 98) * 3, t * (0.8 + rnd(i, 99)) + i, ['#e0572f', '#f0a030', '#d93e2c', '#e8b030'][i % 4]);
+    }
+  },
+};
+
+/** もみじの葉（5つのとがり） */
+export function mapleLeaf(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, rot: number, col: string): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + (k / 10) * TAU;
+    const r = k % 2 === 0 ? s : s * 0.45;
+    const px = Math.cos(a) * r;
+    const py = Math.sin(a) * r;
+    if (k === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,40,20,0.35)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, s * 1.2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 横向きの魚のシルエット */
+function fish(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, dir: number, col: string, t: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(dir, 1);
+  const wag = Math.sin(t * 8) * 0.25;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, s, s * 0.42, 0, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.85, 0);
+  ctx.lineTo(-s * 1.5, -s * (0.45 + wag));
+  ctx.lineTo(-s * 1.5, s * (0.45 - wag));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(s * 0.55, -s * 0.08, s * 0.1, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+// --- 水族館の大水槽 ---
+const aquarium: Theme = {
+  key: 'aquarium',
+  name: '水族館',
+  dark: true,
+  top: '#0c2d4f',
+  draw(ctx, v, gy, t) {
+    const { w, h } = v;
+    const ty1 = gy * 0.92;
+    ctx.fillStyle = vgrad(ctx, 0, ty1, [
+      [0, '#2a7fb8'],
+      [0.5, '#155a8e'],
+      [1, '#0b3a63'],
+    ]);
+    ctx.fillRect(0, 0, w, ty1);
+    // 上から差し込む光
+    ctx.save();
+    for (let k = 0; k < 5; k++) {
+      const x = w * (0.1 + k * 0.2) + Math.sin(t * 0.3 + k) * 20;
+      const g = ctx.createLinearGradient(0, 0, 0, ty1);
+      g.addColorStop(0, 'rgba(200,240,255,0.18)');
+      g.addColorStop(1, 'rgba(200,240,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x - 12, 0);
+      ctx.lineTo(x + 12, 0);
+      ctx.lineTo(x + 70, ty1);
+      ctx.lineTo(x - 10, ty1);
+      ctx.fill();
+    }
+    ctx.restore();
+    // 群れで泳ぐ小魚
+    for (let s = 0; s < 3; s++) {
+      const dir = s % 2 ? -1 : 1;
+      const sp = 22 + s * 9;
+      const cx = drift(w * (0.3 + s * 0.3), sp * dir, t, w, 160);
+      const cy = ty1 * (0.25 + s * 0.2) + Math.sin(t * 0.4 + s) * 20;
+      for (let i = 0; i < 9; i++) {
+        const fx = cx + (rnd(i, 100 + s) - 0.5) * 90;
+        const fy = cy + (rnd(i, 103 + s) - 0.5) * 40 + Math.sin(t * 1.3 + i) * 4;
+        fish(ctx, fx, fy, 6 + rnd(i, 106) * 2, dir, s === 1 ? 'rgba(250,200,90,0.8)' : 'rgba(180,220,245,0.7)', t + i);
+      }
+    }
+    // 泡
+    ctx.strokeStyle = 'rgba(220,245,255,0.5)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 24; i++) {
+      const sp = 20 + rnd(i, 108) * 30;
+      const y = ty1 - ((rnd(i, 109) * ty1 + t * sp) % ty1);
+      const x = w * (0.15 + 0.7 * rnd(i, 110)) + Math.sin(t * 2 + i) * 4;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.5 + rnd(i, 111) * 2.5, 0, TAU);
+      ctx.stroke();
+    }
+    // 水槽の底（砂と岩・海藻）
+    ctx.fillStyle = '#c8b58a';
+    ctx.beginPath();
+    ctx.moveTo(0, ty1);
+    for (let x = 0; x <= w; x += 30) ctx.lineTo(x, ty1 - 18 - Math.sin(x * 0.02) * 8);
+    ctx.lineTo(w, ty1);
+    ctx.fill();
+    for (let k = 0; k < 7; k++) {
+      const x = rnd(k, 112) * w;
+      ctx.strokeStyle = '#3f8f5a';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x, ty1 - 10);
+      for (let j = 1; j <= 6; j++) ctx.lineTo(x + Math.sin(t * 1.2 + j * 0.8 + k) * 6, ty1 - 10 - j * 12);
+      ctx.stroke();
+    }
+    // 水槽の枠と、手前の床
+    ctx.fillStyle = '#1b2430';
+    ctx.fillRect(0, ty1, w, gy - ty1);
+    ctx.fillStyle = vgrad(ctx, gy, h, [
+      [0, '#2c3440'],
+      [1, '#161c24'],
+    ]);
+    ctx.fillRect(0, gy, w, h - gy);
+    ctx.fillStyle = 'rgba(120,190,230,0.12)';
+    ctx.fillRect(0, gy, w, 3);
+  },
+};
+
+// --- 銭湯 ---
+const sento: Theme = {
+  key: 'sento',
+  name: '銭湯',
+  dark: false,
+  top: '#bfe2f3',
+  draw(ctx, v, gy, t) {
+    const { w, h } = v;
+    // 富士山のペンキ絵
+    const my = gy * 0.62;
+    ctx.fillStyle = vgrad(ctx, 0, my, [
+      [0, '#8fcdee'],
+      [1, '#d8eef8'],
+    ]);
+    ctx.fillRect(0, 0, w, my);
+    cloud(ctx, w * 0.18, my * 0.25, 20, 0.9);
+    cloud(ctx, w * 0.82, my * 0.18, 16, 0.9);
+    const fx = w * 0.5;
+    const top = my * 0.28;
+    ctx.fillStyle = '#4f7fb5';
+    ctx.beginPath();
+    ctx.moveTo(fx - w * 0.55, my);
+    ctx.lineTo(fx - 36, top);
+    ctx.lineTo(fx + 36, top);
+    ctx.lineTo(fx + w * 0.55, my);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(fx - 36, top);
+    ctx.lineTo(fx + 36, top);
+    ctx.lineTo(fx + 70, top + 40);
+    for (let k = 0; k <= 6; k++) ctx.lineTo(fx + 70 - (140 * k) / 6, top + 40 + (k % 2 ? 14 : 0));
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#6f9f7c';
+    ctx.beginPath();
+    ctx.moveTo(0, my);
+    for (let x = 0; x <= w; x += 30) ctx.lineTo(x, my - 20 - Math.sin(x * 0.02) * 12);
+    ctx.lineTo(w, my);
+    ctx.fill();
+    // タイルの壁
+    ctx.fillStyle = '#e6f2f6';
+    ctx.fillRect(0, my, w, gy - my);
+    ctx.strokeStyle = 'rgba(120,170,190,0.45)';
+    ctx.lineWidth = 1;
+    for (let y = my; y < gy; y += 22) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    for (let x = 0; x < w; x += 22) {
+      ctx.beginPath();
+      ctx.moveTo(x, my);
+      ctx.lineTo(x, gy);
+      ctx.stroke();
+    }
+    // 湯船のふち（手前の床）
+    ctx.fillStyle = vgrad(ctx, gy, h, [
+      [0, '#a9c7d2'],
+      [1, '#8aaebb'],
+    ]);
+    ctx.fillRect(0, gy, w, h - gy);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    for (let y = gy + 26; y < h; y += 26) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+    for (let x = 13; x < w; x += 26) {
+      ctx.beginPath();
+      ctx.moveTo(x, gy);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    // ゆらゆら立ちのぼる湯気
+    for (let i = 0; i < 8; i++) {
+      const sp = 14 + rnd(i, 120) * 10;
+      const life = gy * 0.9;
+      const k = ((rnd(i, 121) * life + t * sp) % life) / life;
+      const x = w * rnd(i, 122) + Math.sin(t * 0.6 + i) * 18;
+      const y = gy - k * life;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, 50);
+      const a = 0.22 * Math.sin(Math.PI * k);
+      g.addColorStop(0, `rgba(255,255,255,${a})`);
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - 50, y - 50, 100, 100);
+    }
+  },
+};
+
+export const THEMES: Record<ThemeKey, Theme> = { room, garden, meadow, rooftop, nightWindow, kotatsu, sakura, beach, space, rain, autumn, aquarium, sento };
 
 /** 5周目から巡るテーマ */
-const LATER: ThemeKey[] = ['nightWindow', 'kotatsu', 'sakura', 'beach', 'space'];
+const LATER: ThemeKey[] = ['nightWindow', 'autumn', 'kotatsu', 'rain', 'sakura', 'sento', 'beach', 'aquarium', 'space'];
 
-/** ねこみつの周（0 始まり）のテーマ: 部屋 → 庭先 → 草原 → 屋根の上 → そのあとは夜の窓辺・こたつ・桜・海辺・宇宙を巡る */
+/** ねこみつの周（0 始まり）のテーマ: 部屋 → 庭先 → 草原 → 屋根の上 → そのあとは夜の窓辺・紅葉の山寺・こたつ・雨の窓辺・桜・銭湯・海辺・水族館・宇宙を巡る */
 export function themeForCycle(cycle: number): Theme {
   const first: ThemeKey[] = ['room', 'garden', 'meadow', 'rooftop'];
   if (cycle < first.length) return THEMES[first[cycle]];

@@ -1,14 +1,20 @@
 /**
- * 桜の公園の手前で舞う花びら（ワールド座標）。猫の上に落ちると、しばらく乗ったまま一緒に動き、やがて消える。
+ * 桜の公園の花びら・紅葉の山寺のもみじ（ワールド座標）。手前で舞い、猫の上に落ちると、しばらく乗ったまま一緒に動き、やがて消える。
  * 見た目だけで、物理には関わらない。
  */
 import type { Cat } from '../cat/cat';
 import type { Container } from '../physics/container';
 import type { World } from '../physics/world';
+import { mapleLeaf } from './themes';
+
+export type PetalKind = 'petal' | 'leaf';
+const LEAF_COLORS = ['#e0572f', '#f0a030', '#d93e2c', '#e8b030'];
 
 interface Petal {
+  kind: PetalKind;
   x: number;
   y: number;
+  vx: number;
   vy: number;
   sway: number;
   phase: number;
@@ -34,28 +40,46 @@ export class Petals {
     this.items = [];
   }
 
-  /** active: 降らせるか（止めても、降っている花びらはそのまま最後まで見せる） */
-  update(dt: number, active: boolean, bowl: Container, cats: readonly Cat[], world: World, topY: number): void {
+  /** 風が吹いて、左から一度にたくさん吹き付ける */
+  gust(kind: PetalKind, n: number, bowl: Container, topY: number): void {
+    const R = bowl.R;
+    const w = Math.max(bowl.halfW, 200);
+    for (let k = 0; k < n && this.items.length < MAX * 2; k++) {
+      this.items.push(this.make(kind, -w * (1.4 + Math.random() * 0.8), topY + Math.random() * (bowl.openY - topY + R * 0.5), R));
+      const p = this.items[this.items.length - 1];
+      p.vx = R * (1.2 + Math.random() * 0.8);
+      p.age = 0.6;
+    }
+  }
+
+  private make(kind: PetalKind, x: number, y: number, R: number): Petal {
+    return {
+      kind,
+      x,
+      y,
+      vx: 0,
+      vy: R * (0.16 + Math.random() * 0.08),
+      sway: 20 + Math.random() * 30,
+      phase: Math.random() * 6.28,
+      rot: Math.random() * 6.28,
+      spin: (Math.random() - 0.5) * 3,
+      size: (kind === 'leaf' ? 6 : 5) + Math.random() * 3,
+      age: 0,
+      on: null,
+      k: 0,
+      rest: 0,
+    };
+  }
+
+  /** active: 降らせるもの（null なら止める。止めても、降っているものはそのまま最後まで見せる） */
+  update(dt: number, active: PetalKind | null, bowl: Container, cats: readonly Cat[], world: World, topY: number): void {
     const R = bowl.R;
     if (active) {
       this.spawn -= dt;
       if (this.spawn <= 0 && this.items.length < MAX) {
         this.spawn = 0.35 + Math.random() * 0.5;
         const w = Math.max(bowl.halfW, 200) * 1.2;
-        this.items.push({
-          x: (Math.random() * 2 - 1) * w,
-          y: topY - 40,
-          vy: R * (0.16 + Math.random() * 0.08),
-          sway: 20 + Math.random() * 30,
-          phase: Math.random() * 6.28,
-          rot: Math.random() * 6.28,
-          spin: (Math.random() - 0.5) * 3,
-          size: 5 + Math.random() * 3,
-          age: 0,
-          on: null,
-          k: 0,
-          rest: 0,
-        });
+        this.items.push(this.make(active, (Math.random() * 2 - 1) * w, topY - 40, R));
       }
     }
     const boxes = new Map<Cat, [number, number, number, number]>();
@@ -89,7 +113,8 @@ export class Petals {
       }
       p.y += p.vy * dt;
       const dx = Math.sin(p.age * 1.3 + p.phase) * p.sway * dt;
-      p.x += dx;
+      p.x += dx + p.vx * dt;
+      p.vx *= Math.exp(-dt * 0.9);
       p.rot += p.spin * dt;
       // 猫に当たったら乗る
       for (const c of cats) {
@@ -111,7 +136,7 @@ export class Petals {
         p.rest = 0;
         break;
       }
-      return p.y < floor;
+      return p.y < floor && p.x < Math.max(bowl.halfW, 200) * 3;
     });
   }
 
@@ -119,11 +144,18 @@ export class Petals {
     for (const p of this.items) {
       const a = p.on ? Math.min(1, (REST - p.rest) / 1.2) : Math.min(1, p.age / 0.6);
       if (a <= 0) continue;
+      const s = p.size;
+      if (p.kind === 'leaf') {
+        ctx.save();
+        ctx.globalAlpha = a;
+        mapleLeaf(ctx, p.x, p.y, s * 1.2, p.rot, LEAF_COLORS[Math.floor(p.phase * 10) % 4]);
+        ctx.restore();
+        continue;
+      }
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
       ctx.globalAlpha = a;
-      const s = p.size;
       // 先が少し割れた花びら
       ctx.beginPath();
       ctx.moveTo(0, s);

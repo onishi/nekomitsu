@@ -12,7 +12,14 @@ import type { ThemeKey } from './render/themes';
 import type { Accessory } from './cat/cat';
 
 /** テーマごとの季節の小物 */
-const ACCESSORY: Partial<Record<ThemeKey, Accessory>> = { sakura: 'flower', beach: 'straw', nightWindow: 'scarf', space: 'helmet' };
+const ACCESSORY: Partial<Record<ThemeKey, Accessory>> = {
+  sakura: 'flower',
+  beach: 'straw',
+  nightWindow: 'scarf',
+  space: 'helmet',
+  sento: 'towel',
+  autumn: 'scarf',
+};
 
 
 /** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
@@ -101,6 +108,8 @@ export class Game {
   dropX = 0;
   private dropVX = 0;
   private spawnTimer = 0;
+  /** 背景の出来事で、猫たちが目で追う点（ワールド座標） */
+  attention: { x: number; y: number } | null = null;
   /** この面の重力の倍率（宇宙で弱い） */
   private stageGravity = 1;
   /** 海辺: 重力の向きがゆっくり左右に傾く */
@@ -546,6 +555,11 @@ export class Game {
         moving = true;
         break;
       }
+    }
+    // 背景の出来事（猫じゃらし・UFO…）があれば、みんなそちらを見る
+    if (!focus && this.attention) {
+      focus = this.attention;
+      moving = true;
     }
     if (!focus && this.held) {
       const hf = this.held.headFrame();

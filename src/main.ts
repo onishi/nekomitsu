@@ -8,6 +8,7 @@ import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } f
 import { THEMES, themeForCycle, type Theme } from './render/themes';
 import { fireflyAmount, starAmount, timeTint, vesselFor, type Tint, type Vessel } from './cycle';
 import { Petals } from './render/petals';
+import { EVENTS, type SceneEvent } from './render/events';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -443,7 +444,8 @@ const petals = new Petals();
 function updateEffects(dt: number): void {
   fx.update(dt);
   const R = game.bowl.R;
-  petals.update(dt, game.mode === 'mitsu' && themeNow.key === 'sakura', game.bowl, game.cats, game.world, game.dropY - Math.max(R * 0.38, 90));
+  const fall = game.mode !== 'mitsu' ? null : themeNow.key === 'sakura' ? 'petal' : themeNow.key === 'autumn' ? 'leaf' : null;
+  petals.update(dt, fall, game.bowl, game.cats, game.world, game.dropY - Math.max(R * 0.38, 90));
   if (game.phase === 'cleared' && game.clearNap && game.cats.length) {
     // みんなおやすみ: ハートの代わりに zzz
     heartTimer -= dt;
@@ -556,9 +558,9 @@ function vessel(): Vessel {
 // 一日の時間（周の中で朝 → 昼 → 夕方 → 夜）。面が変わると約2.5秒かけて色が移る
 const tintNow: Tint = [255, 255, 255, 0];
 // 虹: 晴れた外のテーマで、クリアしたときにときどき（次の面へ進むと消えていく）
-const RAINBOW_THEMES = new Set(['garden', 'meadow', 'rooftop', 'beach']);
+const RAINBOW_THEMES = new Set(['garden', 'meadow', 'rooftop', 'beach', 'rain', 'autumn']);
 // 夜の星（外のテーマ）・ホタル（草原・庭先）
-const STAR_THEMES = new Set(['garden', 'meadow', 'rooftop', 'sakura', 'beach']);
+const STAR_THEMES = new Set(['garden', 'meadow', 'rooftop', 'sakura', 'beach', 'autumn']);
 const FIREFLY_THEMES = new Set(['garden', 'meadow']);
 let stars = 0;
 let fireflies = 0;
@@ -582,7 +584,8 @@ function ambient(): { tint: Tint; rainbow: number; stars: number; fireflies: num
   }
   if (game.phase === 'cleared' && rainbowStage !== game.stage) {
     rainbowStage = game.stage;
-    rainbowOn = !keshi && RAINBOW_THEMES.has(themeNow.key) && Math.random() < 0.35;
+    // 雨の日は、クリアすると雨上がりの虹が出やすい
+    rainbowOn = !keshi && RAINBOW_THEMES.has(themeNow.key) && Math.random() < (themeNow.key === 'rain' ? 0.7 : 0.35);
   }
   if (game.phase !== 'cleared') rainbowOn = false;
   rainbow = Math.max(0, Math.min(1, rainbow + (rainbowOn ? dt / 1.5 : -dt / 2)));
@@ -593,11 +596,51 @@ function ambient(): { tint: Tint; rainbow: number; stars: number; fireflies: num
   return { tint: tintNow, rainbow, stars, fireflies };
 }
 
+// 背景の出来事（猫じゃらし・すずめ・流星群・雷・UFO…）: ねこみつで、25〜50秒に1回くらい
+let sceneEv: { e: SceneEvent; t0: number } | null = null;
+let sceneEvNext = performance.now() / 1000 + 12 + Math.random() * 12;
+function startSceneEvent(e: SceneEvent): void {
+  const now = performance.now() / 1000;
+  sceneEv = { e, t0: now };
+  if (e.sound) game.sound.ambient(e.sound);
+  if (e.spook) for (const c of game.cats) c.spook();
+  if (e.gust) petals.gust(e.gust, 22, game.bowl, game.dropY - Math.max(game.bowl.R * 0.38, 90));
+}
+function updateSceneEvent(gy: number): void {
+  const now = performance.now() / 1000;
+  if (sceneEv) {
+    const p = (now - sceneEv.t0) / sceneEv.e.dur;
+    if (p >= 1 || themePrev || game.mode !== 'mitsu') {
+      sceneEv = null;
+      game.attention = null;
+      sceneEvNext = now + 25 + Math.random() * 25;
+      return;
+    }
+    const f = sceneEv.e.focus?.(view, gy, p, now) ?? null;
+    game.attention = f ? { x: (f.x - view.ox) / view.scale, y: (f.y - view.oy) / view.scale } : null;
+  } else if (now > sceneEvNext && !paused && !themePrev && game.mode === 'mitsu') {
+    const list = EVENTS[themeNow.key];
+    startSceneEvent(list[Math.floor(Math.random() * list.length)]);
+  }
+}
+
 function render(): void {
   const b = game.bowl;
   const ves = vessel();
   const amb = ambient();
-  drawBackground(ctx, view, b, themeLayers(), performance.now() / 1000, { vessel: ves, ...amb });
+  const now = performance.now() / 1000;
+  drawBackground(ctx, view, b, themeLayers(), now, { vessel: ves, ...amb });
+  const gyScreen = view.oy + tableWorldY(b, ves) * view.scale;
+  updateSceneEvent(gyScreen);
+  const drawEv = (front: boolean) => {
+    const f = sceneEv && (front ? sceneEv.e.drawFront : sceneEv.e.draw);
+    if (!sceneEv || !f) return;
+    ctx.save();
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    f.call(sceneEv.e, ctx, view, gyScreen, (now - sceneEv.t0) / sceneEv.e.dur, now);
+    ctx.restore();
+  };
+  drawEv(false);
   ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, view.ox * view.dpr, view.oy * view.dpr);
   drawBowlBack(ctx, b, ves);
   const k = game.keshi;
@@ -613,6 +656,7 @@ function render(): void {
   }
   petals.draw(ctx);
   drawBowlFront(ctx, b, ves);
+  drawEv(true);
   if (k) drawDangerLine(k.lineY, k.overTime);
   fx.draw(ctx);
   if (press.active) {
@@ -695,6 +739,13 @@ showMenu(false);
 // デバッグ・自動テスト用（__hold(true) でゲームの時間を止め、テストから1フレームずつ進められる）
 (window as unknown as { __game: Game }).__game = game;
 (window as unknown as { __view: View }).__view = view;
+// 背景の出来事をすぐ起こす（動作確認用。名前を省くと今のテーマの最初の出来事）
+(window as unknown as { __event: (name?: string) => string }).__event = (name) => {
+  const list = EVENTS[themeNow.key];
+  const e = list.find((x) => x.name === name) ?? list[0];
+  startSceneEvent(e);
+  return e.name;
+};
 (window as unknown as { __hold: (v: boolean) => void }).__hold = (v) => {
   testHold = v;
 };

@@ -1,5 +1,5 @@
 /**
- * 季節の小物（テーマごと）: 花かんむり・麦わら帽子・マフラー・宇宙ヘルメット。
+ * 季節の小物（テーマごと）: 花かんむり・麦わら帽子・マフラー・宇宙ヘルメット・頭の手ぬぐい。
  * 頭の座標系（上が -y）で描くので、頭の傾きや動きにそのままついていく。見た目だけ。
  */
 import type { Cat } from '../cat/cat';
@@ -112,6 +112,22 @@ export function drawAccessoryOver(ctx: CanvasRenderingContext2D, cat: Cat, time:
     ctx.beginPath();
     ctx.ellipse(0, y0, r * 1.05, r * 0.2, 0, 0, TAU);
     ctx.stroke();
+  } else if (acc === 'towel') {
+    // 銭湯: たたんだ手ぬぐいを頭にのせる
+    ctx.rotate(-0.12);
+    const w = r * 1.15;
+    const h = r * 0.34;
+    const y0 = -r * 1.02;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, y0 - h / 2, w, h, h * 0.35);
+    ctx.fillStyle = '#fbfbf7';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(120,140,160,0.7)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.fillStyle = '#6f9fcf';
+    ctx.fillRect(-w / 2 + w * 0.12, y0 - h / 2 + 1, w * 0.07, h - 2);
+    ctx.fillRect(w / 2 - w * 0.19, y0 - h / 2 + 1, w * 0.07, h - 2);
   } else if (acc === 'helmet') {
     // 宇宙ヘルメット（透明な泡）
     const R = r * 1.5;

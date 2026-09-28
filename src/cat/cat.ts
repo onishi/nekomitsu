@@ -29,7 +29,7 @@ export type Expression =
 
 /** 落ち着いた猫が自分からするアクション */
 /** 季節の小物（テーマごと） */
-export type Accessory = 'flower' | 'straw' | 'scarf' | 'helmet';
+export type Accessory = 'flower' | 'straw' | 'scarf' | 'helmet' | 'towel';
 
 export type CatAction = 'none' | 'groom' | 'lick' | 'yawn' | 'stretch';
 
@@ -873,6 +873,11 @@ export class Cat {
     else e = this.stoic || this.blankTimer > 0 ? 'blank' : 'normal';
     // 香箱座りの猫は目を細めて、くつろいだ顔
     if (e === 'normal' && this.loaf > 0.6) e = 'sleepy';
+    // 雷などで、びくっ（目を丸くする）
+    if (this.spookTimer > 0) {
+      this.spookTimer -= dt;
+      if (this.landed && !env.cleared) e = 'surprised';
+    }
     this.blankTimer -= dt;
     if (this.grumpy && this.landed) {
       // 不機嫌な猫: 触られたり舐められたりするとイカ耳、ふだんはジト目。クリアしても機嫌は直らない
@@ -1069,6 +1074,15 @@ export class Cat {
   /** 寝つくまでの落ち着き時間（不機嫌な猫はなかなか寝ない） */
   private get sleepAt(): number {
     return (this.grumpy ? 12 : 8) * this.sleepiness;
+  }
+  /** 雷などに驚いた残り時間 */
+  private spookTimer = 0;
+  /** びくっとする（寝ていたら起きる） */
+  spook(): void {
+    if (!this.landed) return;
+    this.spookTimer = 0.9 + Math.random() * 0.5;
+    this.calm = Math.min(this.calm, 1.2);
+    if (this.action !== 'none') this.endAction();
   }
   /** 寝つくまでの時間の倍率（こたつの部屋では短い） */
   sleepiness = 1;

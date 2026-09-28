@@ -14,6 +14,7 @@ const VESSEL: Partial<Record<ThemeKey, Vessel>> = {
   meadow: 'kago',
   rooftop: 'danbo',
   kotatsu: 'donabe',
+  sento: 'oke',
 };
 
 export function vesselFor(theme: ThemeKey, kind: string): Vessel {

@@ -261,6 +261,106 @@ export class Sound {
     setTimeout(() => this.purr(0.9), 500);
   }
 
+  /** 背景の出来事の音（風鈴・雷・カポーン・風・UFO） */
+  ambient(kind: 'chime' | 'thunder' | 'kapon' | 'wind' | 'ufo'): void {
+    const ctx = this.ready();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const out = this.master!;
+    const tone = (type: OscillatorType, f: number, s: number, dur: number, vol: number, f1?: number) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.setValueAtTime(f, s);
+      if (f1) o.frequency.exponentialRampToValueAtTime(f1, s + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, s);
+      g.gain.exponentialRampToValueAtTime(vol, s + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + dur);
+      o.connect(g).connect(out);
+      o.start(s);
+      o.stop(s + dur + 0.02);
+    };
+    if (kind === 'chime') {
+      // チリン…チリン
+      for (const [d, f] of [
+        [0, 2350],
+        [0.45, 2200],
+      ]) {
+        tone('sine', f, t + d, 1.6, 0.12);
+        tone('sine', f * 2.76, t + d, 0.7, 0.04);
+      }
+    } else if (kind === 'kapon') {
+      // カポーン（木の桶の音が浴室に響く）
+      const dl = ctx.createDelay(1);
+      dl.delayTime.value = 0.13;
+      const fb = ctx.createGain();
+      fb.gain.value = 0.45;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1600;
+      dl.connect(fb).connect(lp).connect(dl);
+      lp.connect(out);
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(520, t);
+      o.frequency.exponentialRampToValueAtTime(330, t + 0.18);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.3, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g);
+      g.connect(out);
+      g.connect(dl);
+      o.start(t);
+      o.stop(t + 0.4);
+      setTimeout(() => {
+        fb.disconnect();
+        lp.disconnect();
+      }, 3000);
+    } else if (kind === 'thunder' || kind === 'wind') {
+      const thunder = kind === 'thunder';
+      const dur = thunder ? 3.2 : 2.6;
+      const n = this.noiseSrc(ctx);
+      const f = ctx.createBiquadFilter();
+      f.type = thunder ? 'lowpass' : 'bandpass';
+      f.frequency.setValueAtTime(thunder ? 260 : 380, t);
+      if (!thunder) {
+        f.Q.value = 0.8;
+        f.frequency.linearRampToValueAtTime(900, t + dur * 0.5);
+        f.frequency.linearRampToValueAtTime(420, t + dur);
+      } else {
+        f.frequency.exponentialRampToValueAtTime(90, t + dur);
+      }
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(thunder ? 0.5 : 0.14, t + (thunder ? 0.06 : dur * 0.45));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      n.connect(f).connect(g).connect(out);
+      n.start(t);
+      n.stop(t + dur + 0.05);
+    } else {
+      // UFO: ゆらゆら揺れる高い音
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = 640;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 7;
+      const lg = ctx.createGain();
+      lg.gain.value = 90;
+      lfo.connect(lg).connect(o.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.07, t + 0.4);
+      g.gain.setValueAtTime(0.07, t + 1.8);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+      o.connect(g).connect(out);
+      o.start(t);
+      lfo.start(t);
+      o.stop(t + 2.7);
+      lfo.stop(t + 2.7);
+    }
+  }
+
   /** 不機嫌な猫の「ウゥ…」（低いうなり） */
   grumble(): void {
     const ctx = this.ready();
