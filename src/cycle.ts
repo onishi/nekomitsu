@@ -112,17 +112,18 @@ export function themeKeyForStage(stage: number): ThemeKey {
 }
 
 /** 周の特集 */
-export type Feature = 'kitten' | 'black' | 'fluffy' | 'sleepy' | 'dressup' | 'big';
+export type Feature = 'kitten' | 'black' | 'fluffy' | 'long' | 'sleepy' | 'dressup' | 'big';
 export const FEATURE_NAMES: Record<Feature, string> = {
   kitten: '子猫の日',
   black: '黒猫の日',
   fluffy: 'ふわふわの日',
+  long: '長ネコの日',
   sleepy: 'おねむの日',
   dressup: 'おめかしの日',
   big: '大きな器の日',
 };
 const FEATURES = Object.keys(FEATURE_NAMES) as Feature[];
-/** 6日ごとに6つの特集を1回ずつ（並びは6日ごとに変わる。2日目は子猫の日から） */
+/** 特集の数の日ごとに、全部の特集を1回ずつ（並びは毎回変わる。2日目は子猫の日から） */
 function featureBlock(block: number): Feature[] {
   const order = FEATURES.slice();
   for (let i = order.length - 1; i > 0; i--) {
@@ -133,7 +134,7 @@ function featureBlock(block: number): Feature[] {
     const k = order.indexOf('kitten');
     [order[0], order[k]] = [order[k], order[0]];
   } else if (order[0] === featureBlock(block - 1)[FEATURES.length - 1]) {
-    // 前の6日の最後と同じ特集が続かないように
+    // 前のひと巡りの最後と同じ特集が続かないように
     [order[0], order[1]] = [order[1], order[0]];
   }
   return order;

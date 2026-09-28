@@ -315,10 +315,11 @@ export class Game {
     const kinds = KINDS;
     // 最初の1匹は「ふつうの猫」で核の体験を確実に
     if (this.dropsThisStage === 0 && this.stage === 1) return SPECIES.standard;
-    // 子猫の日・ふわふわの日は、半分くらいがその猫
+    // 子猫の日・ふわふわの日・長ネコの日は、半分くらいがその猫
     const f = this.feature;
     if (f === 'kitten' && Math.random() < 0.5) return SPECIES.kitten;
     if (f === 'fluffy' && Math.random() < 0.5) return SPECIES.fluffy;
+    if (f === 'long' && Math.random() < 0.5) return SPECIES.long;
     let tot = 0;
     for (const k of kinds) tot += SPECIES[k].weight;
     let r = Math.random() * tot;
