@@ -1,4 +1,5 @@
 /** 背景・容器（金魚鉢・フラスコ…）の描画 */
+import type { Theme } from './themes';
 import type { Container, Pt } from '../physics/container';
 
 const TAU = Math.PI * 2;
@@ -13,38 +14,24 @@ export interface View {
 }
 
 /** 画面いっぱいの背景（スクリーン座標） */
-export function drawBackground(ctx: CanvasRenderingContext2D, v: View, bowl: Container): void {
+/**
+ * 背景（テーマの情景）と容器の影。layers は下から順に描くテーマ（切り替え中は前のテーマの上に次のテーマを重ねて、じわっと移る）
+ */
+export function drawBackground(
+  ctx: CanvasRenderingContext2D,
+  v: View,
+  bowl: Container,
+  layers: { theme: Theme; alpha: number }[],
+  t: number,
+): void {
   ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   const tableY = v.oy + tableWorldY(bowl) * v.scale;
-  const g = ctx.createLinearGradient(0, 0, 0, tableY);
-  g.addColorStop(0, '#f4ead9');
-  g.addColorStop(1, '#ecdcc4');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, v.w, tableY);
-  // 窓からの柔らかい光
-  const lg = ctx.createRadialGradient(v.w * 0.2, v.h * 0.12, 0, v.w * 0.2, v.h * 0.12, Math.max(v.w, v.h) * 0.6);
-  lg.addColorStop(0, 'rgba(255,248,230,0.75)');
-  lg.addColorStop(1, 'rgba(255,248,230,0)');
-  ctx.fillStyle = lg;
-  ctx.fillRect(0, 0, v.w, tableY);
-  // テーブル
-  const tg = ctx.createLinearGradient(0, tableY, 0, v.h);
-  tg.addColorStop(0, '#c89a6c');
-  tg.addColorStop(0.08, '#b98a5c');
-  tg.addColorStop(1, '#8e6440');
-  ctx.fillStyle = tg;
-  ctx.fillRect(0, tableY, v.w, v.h - tableY);
-  ctx.fillStyle = 'rgba(255,240,215,0.35)';
-  ctx.fillRect(0, tableY, v.w, 2);
-  // 木目
-  ctx.strokeStyle = 'rgba(90,55,30,0.12)';
-  ctx.lineWidth = 1.5;
-  for (let k = 1; k < 5; k++) {
-    const y = tableY + (v.h - tableY) * (k / 5) + Math.sin(k * 7) * 4;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    for (let x = 0; x <= v.w; x += 40) ctx.lineTo(x, y + Math.sin(x * 0.01 + k) * 3);
-    ctx.stroke();
+  for (const { theme, alpha } of layers) {
+    if (alpha <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    theme.draw(ctx, v, tableY, t);
+    ctx.restore();
   }
   // 容器の影
   ctx.setTransform(v.scale * v.dpr, 0, 0, v.scale * v.dpr, v.ox * v.dpr, v.oy * v.dpr);

@@ -3,7 +3,9 @@ import { Game, type GameMode } from './game';
 import type { KeshiEvent } from './keshi';
 import { drawCat, strokeCatSilhouette } from './render/catRenderer';
 import { Effects } from './render/effects';
+import { CYCLE } from './physics/shapes';
 import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
+import { THEMES, themeForCycle, type Theme } from './render/themes';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -460,9 +462,42 @@ function adaptQuality(now: number, renderMs: number): void {
   }
 }
 
+// 背景のテーマ: ねこみつは周（12面）ごとに情景が変わり（部屋 → 庭先 → 草原 → 屋根の上 → …）、
+// 変わり目では約2.5秒かけてじわっと移り変わる。ねこけしはいつもの部屋
+let themeNow: Theme = THEMES.room;
+let themePrev: Theme | null = null;
+let themeT = 1;
+let themeLast = performance.now();
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+function themeLayers(): { theme: Theme; alpha: number }[] {
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - themeLast) / 1000);
+  themeLast = now;
+  const want = game.mode === 'keshi' ? THEMES.room : themeForCycle(Math.floor((game.stage - 1) / CYCLE));
+  if (want !== themeNow) {
+    themePrev = themeNow;
+    themeNow = want;
+    themeT = 0;
+    // 画面の外（スクロールの跳ね返りなど）やブラウザの上のバーの色、暗いテーマでのタイトルの色
+    document.body.style.background = want.top;
+    themeMeta?.setAttribute('content', want.top);
+    document.body.classList.toggle('theme-dark', want.dark);
+  }
+  if (themePrev && themeT < 1) {
+    themeT = Math.min(1, themeT + dt / 2.5);
+    const e = themeT * themeT * (3 - 2 * themeT);
+    return [
+      { theme: themePrev, alpha: 1 },
+      { theme: themeNow, alpha: e },
+    ];
+  }
+  themePrev = null;
+  return [{ theme: themeNow, alpha: 1 }];
+}
+
 function render(): void {
   const b = game.bowl;
-  drawBackground(ctx, view, b);
+  drawBackground(ctx, view, b, themeLayers(), performance.now() / 1000);
   ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, view.ox * view.dpr, view.oy * view.dpr);
   drawBowlBack(ctx, b);
   const k = game.keshi;

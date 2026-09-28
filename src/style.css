@@ -483,3 +483,9 @@ button.icon:active {
   color: inherit;
   white-space: nowrap;
 }
+
+/* 暗い背景のテーマ（夜の窓辺・宇宙）では、背景の上に直接のるタイトルの文字を明るく */
+body.theme-dark .title {
+  color: #f6ecdc;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
