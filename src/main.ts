@@ -234,33 +234,44 @@ const autoBtn = $<HTMLButtonElement>('autoBtn');
 let auto = false;
 let autoTimer = 0;
 let autoAim: number | null = null;
-/** 隠しモード: オートのボタンを長押しすると倍速（次の猫を落とすまでの間を半分に。落ちる速さは同じ） */
-let autoFast = false;
-function setAuto(on: boolean, fast = false): void {
+/**
+ * 隠しモード: オートのボタンを長押しすると倍速（次の猫を落とすまでの間やクリア後の余韻を短く。落ちる速さは同じ）。
+ * 0.6秒で ×2、そのまま押し続けて1.8秒で ×4。×2 の最中に長押しすると ×4
+ */
+let autoPace = 1;
+function setAuto(on: boolean, pace = 1): void {
   auto = on;
-  autoFast = on && fast;
-  game.pace = autoFast ? 2 : 1;
+  autoPace = on ? pace : 1;
+  game.pace = autoPace;
   autoAim = null;
   autoTimer = 0.4;
   autoBtn.setAttribute('aria-pressed', String(on));
-  autoBtn.classList.toggle('fast', autoFast);
+  autoBtn.classList.toggle('fast', autoPace > 1);
+  autoBtn.dataset.pace = `×${autoPace}`;
   autoBtn.setAttribute('aria-label', on ? 'オートモードを止める' : 'オートモードにする');
   if (on) hint.classList.add('fade');
 }
 setAuto(false);
-// 長押し（0.6秒）で倍速のオート。長押しのあとのクリックは無視する
-let autoPressTimer = 0;
+// 長押しのあとのクリックは無視する
+let autoPressTimers: number[] = [];
 let autoLongPressed = false;
+const clearAutoPress = () => {
+  for (const t of autoPressTimers) clearTimeout(t);
+  autoPressTimers = [];
+};
 autoBtn.addEventListener('pointerdown', () => {
   autoLongPressed = false;
-  clearTimeout(autoPressTimer);
-  autoPressTimer = window.setTimeout(() => {
+  clearAutoPress();
+  const already = auto && autoPace >= 2;
+  const step = (pace: number) => {
     autoLongPressed = true;
     game.sound.unlock();
-    setAuto(true, true);
-  }, 600);
+    setAuto(true, pace);
+  };
+  autoPressTimers.push(window.setTimeout(() => step(already ? 4 : 2), 600));
+  if (!already) autoPressTimers.push(window.setTimeout(() => step(4), 1800));
 });
-for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) autoBtn.addEventListener(ev, () => clearTimeout(autoPressTimer));
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) autoBtn.addEventListener(ev, clearAutoPress);
 autoBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 autoBtn.addEventListener('click', () => {
   if (autoLongPressed) {
@@ -278,7 +289,7 @@ function updateAuto(dt: number): void {
   if (game.phase === 'cleared') {
     // クリアの余韻を少し見せてから次の面へ
     // みんな眠ってしまった面は、寝顔を長めに見せる
-    const linger = (autoFast ? 1600 : 3200) * (game.clearNap ? 2 : 1);
+    const linger = (3200 / autoPace) * (game.clearNap ? 2 : 1);
     if (clearShown && performance.now() - clearShownAt > linger) goNext();
     return;
   }

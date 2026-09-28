@@ -284,7 +284,7 @@ button.toggle {
   user-select: none;
 }
 button.toggle.fast::after {
-  content: '×2';
+  content: attr(data-pace);
   position: absolute;
   right: -6px;
   bottom: -4px;
