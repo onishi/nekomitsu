@@ -274,6 +274,8 @@ export class World {
   polys: Poly[] = [];
   gravity = 1500;
   gravityScale = 1;
+  /** 横向きの重力（gravity に対する割合。容器ごとゆっくり傾いているように見せる） */
+  gravityX = 0;
   substeps = 4;
   frameDt = 1 / 60;
   /** 容器（金魚鉢・フラスコ…） */
@@ -481,11 +483,12 @@ export class World {
     const { x, y, px, py, vx, vy, w, ax, ay } = this;
     const n = this.n;
     const g = this.gravity * this.gravityScale;
+    const gx = this.gravity * this.gravityX;
     for (let i = 0; i < n; i++) {
       px[i] = x[i];
       py[i] = y[i];
       if (w[i] === 0) continue;
-      vx[i] += ax[i] * h;
+      vx[i] += (gx + ax[i]) * h;
       vy[i] += (g + ay[i]) * h;
       x[i] += vx[i] * h;
       y[i] += vy[i] * h;

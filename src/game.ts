@@ -8,6 +8,11 @@ import { World } from './physics/world';
 import { Keshi, keshiSpecies } from './keshi';
 import { BASE_AREA, CYCLE, FILL_GOALS } from './physics/shapes';
 import { themeKeyForStage } from './cycle';
+import type { ThemeKey } from './render/themes';
+import type { Accessory } from './cat/cat';
+
+/** テーマごとの季節の小物 */
+const ACCESSORY: Partial<Record<ThemeKey, Accessory>> = { sakura: 'flower', beach: 'straw', nightWindow: 'scarf', space: 'helmet' };
 
 
 /** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
@@ -96,6 +101,10 @@ export class Game {
   dropX = 0;
   private dropVX = 0;
   private spawnTimer = 0;
+  /** この面の重力の倍率（宇宙で弱い） */
+  private stageGravity = 1;
+  /** 海辺: 重力の向きがゆっくり左右に傾く */
+  private stageSway = false;
   /** うつる途中のあくび（少し遅れて隣の猫があくびする） */
   private yawns: { cat: Cat; at: number; chain: { n: number } }[] = [];
   /** 進み方の速さ（オートの倍速モードで 2）。次の猫が出てくるまでの間だけ縮める（落ちる速さは同じ） */
@@ -189,7 +198,10 @@ export class Game {
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world.clear();
     this.world.setBowl(this.bowl);
+    this.stageGravity = 1;
+    this.stageSway = false;
     this.world.gravityScale = 1;
+    this.world.gravityX = 0;
     this.cats = [];
     this.held = null;
     this.stir.active = false;
@@ -249,7 +261,12 @@ export class Game {
     this.bowl = buildContainer(this.shape.spec, this.shape.area);
     this.world.clear();
     this.world.setBowl(this.bowl);
-    this.world.gravityScale = 1;
+    // 宇宙では重力が弱く、ふわふわ落ちる。海辺では容器ごとゆっくり揺れる（重力の向きが左右に少し傾く）
+    const theme = themeKeyForStage(n);
+    this.stageGravity = theme === 'space' ? 0.55 : 1;
+    this.stageSway = theme === 'beach';
+    this.world.gravityScale = this.stageGravity;
+    this.world.gravityX = 0;
     this.cats = [];
     this.held = null;
     this.stir.active = false;
@@ -315,6 +332,9 @@ export class Game {
     c.stoic = carry ? carry.stoic : forcedStoic ?? (!grumpy && Math.random() < 0.15);
     // こたつの部屋では、ぬくぬくしてすぐ眠くなる
     if (!this.keshi && themeKeyForStage(this.stage) === 'kotatsu') c.sleepiness = 0.45;
+    // 季節の小物（3匹に1匹くらい）
+    const acc = this.keshi ? undefined : ACCESSORY[themeKeyForStage(this.stage)];
+    if (acc && Math.random() < 0.3) c.accessory = acc;
     this.dropX = this.clampX(this.targetX, c);
     this.held = c;
     this.heldIntro = 0;
@@ -488,6 +508,8 @@ export class Game {
     this.time += dt;
     this.env.time = this.time;
     this.updateYawns();
+    // 約14秒で一往復、±3°ほど
+    this.world.gravityX = this.stageSway ? Math.sin((this.time * Math.PI * 2) / 14) * 0.05 : 0;
 
     // 吊るされた猫
     // クリアしたら次の猫は出さない（表示中の猫は落とせる）
@@ -591,7 +613,7 @@ export class Game {
       else if (t < 0.8) s = 1;
       else s = Math.max(0.35, 1 - (t - 0.8) / 0.6);
       this.squeeze = s * s * (3 - 2 * s);
-      this.world.gravityScale = 1 + 0.25 * this.squeeze;
+      this.world.gravityScale = this.stageGravity * (1 + 0.25 * this.squeeze);
     }
   }
 

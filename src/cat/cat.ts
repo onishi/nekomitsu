@@ -28,6 +28,9 @@ export type Expression =
   | 'stretch'; // のびー: 目をつぶって横線だけ（- -）
 
 /** 落ち着いた猫が自分からするアクション */
+/** 季節の小物（テーマごと） */
+export type Accessory = 'flower' | 'straw' | 'scarf' | 'helmet';
+
 export type CatAction = 'none' | 'groom' | 'lick' | 'yawn' | 'stretch';
 
 export type CatEvent = 'posu' | 'munyu' | 'supo' | 'lick' | 'yawn';
@@ -1147,6 +1150,8 @@ export class Cat {
 
   /** 描画用: 線の目（- -）で寝ている */
   sleepFlat = false;
+  /** 描画用: 身につけている小物 */
+  accessory: Accessory | null = null;
   /** 動じない性格（押されても潰されても無表情） */
   stoic = false;
   /** たまに「スン…」と無表情になる残り時間 */

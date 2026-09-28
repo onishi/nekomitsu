@@ -5,6 +5,7 @@
  * ことで「中身は多少ぐちゃっとしても、見た目は猫らしい輪郭」に補正する。
  * 顔は頭クラスタの剛体フレームで描くので、体がどれだけ潰れても崩れない。
  */
+import { drawAccessoryOver, drawAccessoryUnder } from './accessories';
 import type { Cat } from '../cat/cat';
 import { CONTACT_BOWL } from '../physics/world';
 
@@ -384,7 +385,9 @@ export function drawCat(ctx: CanvasRenderingContext2D, cat: Cat, time: number, o
   }
 
   if (tailFront) drawTail(ctx, cat, warp);
+  drawAccessoryUnder(ctx, cat);
   drawHead(ctx, cat, time);
+  drawAccessoryOver(ctx, cat, time);
   // 毛繕い中は前脚を顔の手前に
   if (cat.groomPose > 0.3) drawLegs(ctx, cat, ring, time, 'top', ring0);
 }
