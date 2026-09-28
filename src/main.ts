@@ -6,7 +6,8 @@ import { Effects } from './render/effects';
 import { CYCLE } from './physics/shapes';
 import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
 import { THEMES, themeForCycle, type Theme } from './render/themes';
-import { timeTint, vesselFor, type Tint, type Vessel } from './cycle';
+import { fireflyAmount, starAmount, timeTint, vesselFor, type Tint, type Vessel } from './cycle';
+import { Petals } from './render/petals';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -212,6 +213,7 @@ function goNext(): void {
   if (game.phase !== 'cleared' || !clearShown || performance.now() - clearShownAt < 900) return;
   game.nextStage();
   fx.clear();
+  petals.clear();
   clearEl.hidden = true;
   clearShown = false;
   layout();
@@ -266,7 +268,9 @@ function updateAuto(dt: number): void {
   autoTimer -= dt;
   if (game.phase === 'cleared') {
     // クリアの余韻を少し見せてから次の面へ
-    if (clearShown && performance.now() - clearShownAt > (autoFast ? 1600 : 3200)) goNext();
+    // みんな眠ってしまった面は、寝顔を長めに見せる
+    const linger = (autoFast ? 1600 : 3200) * (game.clearNap ? 2 : 1);
+    if (clearShown && performance.now() - clearShownAt > linger) goNext();
     return;
   }
   if (game.phase === 'gameover') {
@@ -324,6 +328,7 @@ function startMode(mode: GameMode): void {
   game.startMode(mode);
   if (game.keshi) game.keshi.onEvent = onKeshiEvent;
   fx.clear();
+  petals.clear();
   clearEl.hidden = true;
   clearShown = false;
   overEl.hidden = true;
@@ -357,7 +362,9 @@ titleBtn.addEventListener('click', () => {
 
 let clearShownAt = 0;
 let clearShown = false;
+const clearSub = clearEl.querySelector('.sub');
 game.onClear = () => {
+  if (clearSub) clearSub.textContent = game.clearNap ? 'みんなおやすみ…' : '猫でいっぱい！';
   setTimeout(() => {
     clearEl.hidden = false;
     clearShown = true;
@@ -423,9 +430,22 @@ function onKeshiEvent(e: KeshiEvent): void {
   }
 }
 let heartTimer = 0;
+// 桜の公園では、手前にも花びらが舞って猫の上に乗る
+const petals = new Petals();
 function updateEffects(dt: number): void {
   fx.update(dt);
-  if (game.phase === 'cleared' && game.time - game.clearTime < 3 && game.cats.length) {
+  const R = game.bowl.R;
+  petals.update(dt, game.mode === 'mitsu' && themeNow.key === 'sakura', game.bowl, game.cats, game.world, game.dropY - Math.max(R * 0.38, 90));
+  if (game.phase === 'cleared' && game.clearNap && game.cats.length) {
+    // みんなおやすみ: ハートの代わりに zzz
+    heartTimer -= dt;
+    if (heartTimer <= 0) {
+      heartTimer = 0.35;
+      const c = game.cats[Math.floor(Math.random() * game.cats.length)];
+      const h = c.headFrame();
+      fx.text(Math.random() < 0.5 ? 'z' : 'Z', h.x + c.species.headR * 0.6, h.y - c.species.headR, 20 + Math.random() * 10, '#7d8cc4', 2);
+    }
+  } else if (game.phase === 'cleared' && game.time - game.clearTime < 3 && game.cats.length) {
     heartTimer -= dt;
     if (heartTimer <= 0) {
       heartTimer = 0.09;
@@ -529,11 +549,16 @@ function vessel(): Vessel {
 const tintNow: Tint = [255, 255, 255, 0];
 // 虹: 晴れた外のテーマで、クリアしたときにときどき（次の面へ進むと消えていく）
 const RAINBOW_THEMES = new Set(['garden', 'meadow', 'rooftop', 'beach']);
+// 夜の星（外のテーマ）・ホタル（草原・庭先）
+const STAR_THEMES = new Set(['garden', 'meadow', 'rooftop', 'sakura', 'beach']);
+const FIREFLY_THEMES = new Set(['garden', 'meadow']);
+let stars = 0;
+let fireflies = 0;
 let rainbow = 0;
 let rainbowOn = false;
 let rainbowStage = -1;
 let ambientLast = performance.now();
-function ambient(): { tint: Tint; rainbow: number } {
+function ambient(): { tint: Tint; rainbow: number; stars: number; fireflies: number } {
   const now = performance.now();
   const dt = Math.min(0.1, (now - ambientLast) / 1000);
   ambientLast = now;
@@ -553,14 +578,18 @@ function ambient(): { tint: Tint; rainbow: number } {
   }
   if (game.phase !== 'cleared') rainbowOn = false;
   rainbow = Math.max(0, Math.min(1, rainbow + (rainbowOn ? dt / 1.5 : -dt / 2)));
-  return { tint: tintNow, rainbow };
+  const wantStars = !keshi && STAR_THEMES.has(themeNow.key) ? starAmount(game.stage) : 0;
+  const wantFlies = !keshi && FIREFLY_THEMES.has(themeNow.key) ? fireflyAmount(game.stage) : 0;
+  stars += (wantStars - stars) * k;
+  fireflies += (wantFlies - fireflies) * k;
+  return { tint: tintNow, rainbow, stars, fireflies };
 }
 
 function render(): void {
   const b = game.bowl;
   const ves = vessel();
   const amb = ambient();
-  drawBackground(ctx, view, b, themeLayers(), performance.now() / 1000, ves, amb.tint, amb.rainbow);
+  drawBackground(ctx, view, b, themeLayers(), performance.now() / 1000, { vessel: ves, ...amb });
   ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, view.ox * view.dpr, view.oy * view.dpr);
   drawBowlBack(ctx, b, ves);
   const k = game.keshi;
@@ -574,6 +603,7 @@ function render(): void {
       drawCat(ctx, f.b, game.time, false);
     }
   }
+  petals.draw(ctx);
   drawBowlFront(ctx, b, ves);
   if (k) drawDangerLine(k.lineY, k.overTime);
   fx.draw(ctx);

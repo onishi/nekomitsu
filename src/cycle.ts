@@ -1,9 +1,9 @@
 /**
  * ねこみつの周（12面）ごとの移り変わり: 容器の素材・一日の時間（朝 → 昼 → 夕方 → 夜）。
- * どれも見た目だけで、物理には関わらない。
+ * 見た目のほか、連鎖あくび・こたつの眠気など猫のふるまいにも使う。
  */
 import { CYCLE, isTube, type ShapeKind } from './physics/shapes';
-import type { ThemeKey } from './render/themes';
+import { themeForCycle, type ThemeKey } from './render/themes';
 
 /** 容器の素材 */
 export type Vessel = 'glass' | 'oke' | 'kago' | 'danbo' | 'donabe';
@@ -47,5 +47,22 @@ export function timeTint(stage: number, dark: boolean): Tint {
   return [t[0], t[1], t[2], dark ? t[3] * 0.35 : t[3]];
 }
 
-/** 夕方〜夜（ホタルなどに使う） */
-export const isDusk = (stage: number) => (stage - 1) % CYCLE >= 7;
+/** 面のテーマ（ねこみつ） */
+export const themeKeyForStage = (stage: number): ThemeKey => themeForCycle(Math.floor((stage - 1) / CYCLE)).key;
+
+/** 周の中の時刻 0..11（0 が朝、11 が夜更け） */
+export const hourOf = (stage: number) => (stage - 1) % CYCLE;
+
+/** 夜空の星の濃さ（2周目から。夜になるほど濃い） */
+export function starAmount(stage: number): number {
+  if (stage <= CYCLE) return 0;
+  const h = hourOf(stage);
+  return h >= 9 ? 1 : h === 8 ? 0.35 : 0;
+}
+
+/** ホタル（2周目から、夕方〜夜） */
+export function fireflyAmount(stage: number): number {
+  if (stage <= CYCLE) return 0;
+  const h = hourOf(stage);
+  return h >= 8 ? 1 : h === 7 ? 0.5 : 0;
+}

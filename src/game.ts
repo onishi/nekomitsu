@@ -6,7 +6,8 @@ import type { Container } from './physics/container';
 import { buildContainer, SHAPE_NAMES, stageShape, type ShapeKind, type ShapeSpec } from './physics/shapes';
 import { World } from './physics/world';
 import { Keshi, keshiSpecies } from './keshi';
-import { BASE_AREA, FILL_GOALS } from './physics/shapes';
+import { BASE_AREA, CYCLE, FILL_GOALS } from './physics/shapes';
+import { themeKeyForStage } from './cycle';
 
 
 /** 落とす猫の体型（全ステージ共通。出やすさは SPECIES の weight） */
@@ -95,6 +96,8 @@ export class Game {
   dropX = 0;
   private dropVX = 0;
   private spawnTimer = 0;
+  /** うつる途中のあくび（少し遅れて隣の猫があくびする） */
+  private yawns: { cat: Cat; at: number; chain: { n: number } }[] = [];
   /** 進み方の速さ（オートの倍速モードで 2）。次の猫が出てくるまでの間だけ縮める（落ちる速さは同じ） */
   pace = 1;
   /** 吊るされた猫の登場アニメ 0..1 */
@@ -113,6 +116,10 @@ export class Game {
   private lastCoats: string[] = [];
   private fillCells: Float64Array = new Float64Array(0);
   private env: CatEnv;
+  /** みんな眠ってしまった面（クリアの演出）か */
+  get clearNap(): boolean {
+    return !!this.env.clearNap;
+  }
   onClear: (() => void) | null = null;
   onFirstDrop: (() => void) | null = null;
   onCatEvent: ((kind: CatEvent, cat: Cat, strength: number) => void) | null = null;
@@ -139,7 +146,10 @@ export class Game {
       },
       squeeze: 0,
       cleared: false,
-      event: (kind, cat, strength) => this.onCatEvent?.(kind, cat, strength),
+      event: (kind, cat, strength) => {
+        if (kind === 'yawn') this.spreadYawn(cat, { n: 1 });
+        this.onCatEvent?.(kind, cat, strength);
+      },
       sound: {
         posu: (v) => this.sound.posu(v),
         munyu: (v) => this.sound.munyu(v),
@@ -188,6 +198,8 @@ export class Game {
     this.squeeze = 0;
     this.dropsThisStage = 0;
     this.env.cleared = false;
+    this.env.clearNap = false;
+    this.yawns = [];
     this.spawnHeld();
     this.heldIntro = 1;
   }
@@ -247,6 +259,8 @@ export class Game {
     this.judgeTimer = 0;
     this.dropsThisStage = 0;
     this.env.cleared = false;
+    this.env.clearNap = false;
+    this.yawns = [];
     this.buildFillCells();
     this.spawnHeld(carry);
     this.heldIntro = 1;
@@ -299,6 +313,8 @@ export class Game {
     const c = new Cat(this.world, sp, coat, facing, 0, this.dropY, grumpy);
     // 動じない猫（押されても無表情）はたまに（約15%）
     c.stoic = carry ? carry.stoic : forcedStoic ?? (!grumpy && Math.random() < 0.15);
+    // こたつの部屋では、ぬくぬくしてすぐ眠くなる
+    if (!this.keshi && themeKeyForStage(this.stage) === 'kotatsu') c.sleepiness = 0.45;
     this.dropX = this.clampX(this.targetX, c);
     this.held = c;
     this.heldIntro = 0;
@@ -440,9 +456,38 @@ export class Game {
     if (this.dropsThisStage === 1 && this.onFirstDrop) this.onFirstDrop();
   }
 
+  /**
+   * 連鎖あくび（2周目から）: 近くの起きている猫に、半分くらいの確率で 0.4〜0.8 秒遅れてうつる。
+   * ひとつの連鎖で最大 5 匹まで
+   */
+  private spreadYawn(src: Cat, chain: { n: number }): void {
+    if (this.keshi || this.stage <= CYCLE || this.phase === 'cleared') return;
+    const a = src.headFrame();
+    for (const o of this.cats) {
+      if (chain.n + this.yawns.filter((y) => y.chain === chain).length >= 6) return;
+      if (o === src || !o.landed || this.yawns.some((y) => y.cat === o)) continue;
+      const b = o.headFrame();
+      const reach = (src.species.headR + o.species.headR) * 3.2;
+      if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 > reach * reach) continue;
+      if (Math.random() < 0.5) this.yawns.push({ cat: o, at: this.time + 0.4 + Math.random() * 0.4, chain });
+    }
+  }
+
+  private updateYawns(): void {
+    if (!this.yawns.length) return;
+    const due = this.yawns.filter((y) => y.at <= this.time);
+    this.yawns = this.yawns.filter((y) => y.at > this.time);
+    for (const y of due) {
+      if (this.phase === 'cleared' || !this.cats.includes(y.cat) || !y.cat.catchYawn()) continue;
+      y.chain.n++;
+      this.spreadYawn(y.cat, y.chain);
+    }
+  }
+
   update(dt: number): void {
     this.time += dt;
     this.env.time = this.time;
+    this.updateYawns();
 
     // 吊るされた猫
     // クリアしたら次の猫は出さない（表示中の猫は落とせる）
@@ -529,6 +574,8 @@ export class Game {
           this.clearTime = this.time;
           this.clearFill = this.fill;
           this.env.cleared = true;
+          // 3周目からは、まれにクリアした瞬間みんな眠ってしまう
+          this.env.clearNap = !this.keshi && this.stage > CYCLE * 2 && Math.random() < 1 / 8;
           this.sound.clear();
           if (this.onClear) this.onClear();
         } else {

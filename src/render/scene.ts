@@ -15,7 +15,17 @@ export interface View {
   h: number;
 }
 
-/** 画面いっぱいの背景（スクリーン座標） */
+/** 背景に重ねるもの（周の移り変わり） */
+export interface BgExtras {
+  vessel?: Vessel;
+  /** 時間帯の色 */
+  tint?: Tint;
+  /** 虹・夜空の星・ホタルの濃さ 0..1 */
+  rainbow?: number;
+  stars?: number;
+  fireflies?: number;
+}
+
 /**
  * 背景（テーマの情景）と容器の影。layers は下から順に描くテーマ（切り替え中は前のテーマの上に次のテーマを重ねて、じわっと移る）
  */
@@ -25,10 +35,9 @@ export function drawBackground(
   bowl: Container,
   layers: { theme: Theme; alpha: number }[],
   t: number,
-  vessel: Vessel = 'glass',
-  tint: Tint = [255, 255, 255, 0],
-  rainbow = 0,
+  extras: BgExtras = {},
 ): void {
+  const { vessel = 'glass', tint = [255, 255, 255, 0], rainbow = 0, stars = 0, fireflies = 0 } = extras;
   ctx.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   const tableY = v.oy + tableWorldY(bowl, vessel) * v.scale;
   for (const { theme, alpha } of layers) {
@@ -47,6 +56,8 @@ export function drawBackground(
     ctx.fillRect(0, 0, v.w, v.h);
     ctx.restore();
   }
+  if (stars > 0) drawStars(ctx, v, tableY, t, stars);
+  if (fireflies > 0) drawFireflies(ctx, v, tableY, t, fireflies);
   // 容器の影
   ctx.setTransform(v.scale * v.dpr, 0, 0, v.scale * v.dpr, v.ox * v.dpr, v.oy * v.dpr);
   const sy = tableWorldY(bowl, vessel);
@@ -69,6 +80,43 @@ const needsStand = (b: Container) => b.bottomHalfW < b.R * 0.15;
 export function tableWorldY(b: Container, vessel: Vessel = 'glass'): number {
   if (needsStand(b)) return b.bottomY + b.R * 0.1;
   return b.bottomY + (vessel === 'glass' ? glassThickness(b) * 1.6 : matThickness(b, vessel));
+}
+
+/** 夜空の星（外のテーマの夜）。空の上のほうほど多く、またたく */
+function drawStars(ctx: CanvasRenderingContext2D, v: View, gy: number, t: number, a: number): void {
+  const n = Math.round((v.w * gy) / 5200);
+  for (let i = 0; i < n; i++) {
+    const y = Math.pow(hash(i, 31), 1.6) * gy * 0.55;
+    const x = hash(i, 32) * v.w;
+    const tw = 0.45 + 0.55 * Math.abs(Math.sin(t * (0.5 + hash(i, 33)) + i));
+    const fade = 1 - y / (gy * 0.55);
+    ctx.fillStyle = `rgba(255,250,225,${a * tw * (0.35 + 0.65 * fade)})`;
+    const s = 1 + hash(i, 34) * 1.3;
+    ctx.fillRect(x, y, s, s);
+  }
+}
+
+/** ホタル（草原・庭先の夕方〜夜）: 地面の近くをふわふわ漂って、ゆっくり明滅する */
+function drawFireflies(ctx: CanvasRenderingContext2D, v: View, gy: number, t: number, a: number): void {
+  const n = 14;
+  for (let i = 0; i < n; i++) {
+    const bx = hash(i, 41) * v.w;
+    const by = gy * (0.45 + hash(i, 42) * 0.5);
+    const x = bx + Math.sin(t * (0.25 + hash(i, 43) * 0.3) + i * 2) * 40 + Math.sin(t * 1.3 + i) * 6;
+    const y = by + Math.sin(t * (0.35 + hash(i, 44) * 0.3) + i) * 22;
+    const glow = Math.max(0, Math.sin(t * (0.8 + hash(i, 45) * 0.6) + i * 1.7));
+    const al = a * glow * glow;
+    if (al < 0.02) continue;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, 14);
+    g.addColorStop(0, `rgba(230,255,140,${0.55 * al})`);
+    g.addColorStop(1, 'rgba(230,255,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x - 14, y - 14, 28, 28);
+    ctx.fillStyle = `rgba(250,255,200,${al})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.8, 0, TAU);
+    ctx.fill();
+  }
 }
 
 /** 虹（クリアのあとにときどき）。空の高いところに大きな弧 */
@@ -421,6 +469,14 @@ function matBack(ctx: CanvasRenderingContext2D, b: Container, vessel: Exclude<Ve
   ctx.strokeStyle = 'rgba(70,40,20,0.12)';
   ctx.lineWidth = R * 0.2;
   ctx.stroke();
+  if (vessel === 'donabe') {
+    // こたつのぬくもり: 底のほうがほんのり橙
+    const wg = ctx.createRadialGradient(b.bottomCX, yb, 0, b.bottomCX, yb, Math.max(R * 0.9, hw));
+    wg.addColorStop(0, 'rgba(255,150,70,0.3)');
+    wg.addColorStop(1, 'rgba(255,150,70,0)');
+    ctx.fillStyle = wg;
+    ctx.fillRect(-hw - 20, yo - 20, hw * 2 + 40, yb - yo + 40);
+  }
   ctx.restore();
   // 口の奥側の縁
   const ry = Math.max(6, b.openHalfW * 0.13);

@@ -30,7 +30,7 @@ export type Expression =
 /** 落ち着いた猫が自分からするアクション */
 export type CatAction = 'none' | 'groom' | 'lick' | 'yawn' | 'stretch';
 
-export type CatEvent = 'posu' | 'munyu' | 'supo' | 'lick';
+export type CatEvent = 'posu' | 'munyu' | 'supo' | 'lick' | 'yawn';
 
 export interface CatEnv {
   time: number;
@@ -42,6 +42,8 @@ export interface CatEnv {
   /** クリア演出のむにゅっ度 0..1 */
   squeeze: number;
   cleared: boolean;
+  /** クリアした瞬間にみんな眠ってしまう面（まれ） */
+  clearNap?: boolean;
   sound: {
     posu(v: number): void;
     munyu(v: number): void;
@@ -847,7 +849,7 @@ export class Cat {
     this.headBuried += ((headHits >= 3 ? 1 : 0) - this.headBuried) * Math.min(1, dt * 2);
     let e: Expression;
     if (!this.landed) e = 'surprised';
-    else if (env.cleared) e = 'happy';
+    else if (env.cleared) e = env.clearNap ? 'sleep' : 'happy';
     else if (this.impactTimer > 0) e = 'startled';
     else if (this.pressTimer > 0 || squash > 1.9) e = this.stoic ? 'blank' : 'squint';
     else if (this.action === 'yawn') e = 'yawn';
@@ -871,7 +873,7 @@ export class Cat {
     }
     if (e !== 'sleep' && e !== 'bliss' && this.calm < 2) this.purred = false;
     // 寝つくたびに寝顔を決める（半分は「- -」の線の目、半分は「すやすや」の弧の目）
-    if (e === 'sleep' && this.expression !== 'sleep') this.sleepFlat = Math.random() < 0.5;
+    if (e === 'sleep' && this.expression !== 'sleep') this.sleepFlat = env.cleared || Math.random() < 0.5;
     this.expression = e;
     this.blush += ((e === 'bliss' || e === 'happy' || this.action === 'lick' ? 1 : 0) - this.blush) * Math.min(1, dt * 2);
     if (this.grumpy) this.blush = 0;
@@ -951,7 +953,11 @@ export class Cat {
           // 不機嫌な猫は他の猫を舐めない
           if (target && r < 0.45 && !this.grumpy) this.startAction('lick', 2.5 + Math.random() * 2, target);
           else if (r < 0.8) this.startAction('groom', 2.5 + Math.random() * 2.5, null);
-          else this.startAction('yawn', 1.6, null);
+          else {
+            this.startAction('yawn', 1.6, null);
+            // まわりの猫にうつることがある（連鎖あくび）
+            env.event('yawn', this, 0);
+          }
         }
       }
     }
@@ -1048,7 +1054,18 @@ export class Cat {
 
   /** 寝つくまでの落ち着き時間（不機嫌な猫はなかなか寝ない） */
   private get sleepAt(): number {
-    return this.grumpy ? 12 : 8;
+    return (this.grumpy ? 12 : 8) * this.sleepiness;
+  }
+  /** 寝つくまでの時間の倍率（こたつの部屋では短い） */
+  sleepiness = 1;
+
+  /** 隣の猫のあくびがうつる。起きていて、何もしていないときだけ。うつったら true */
+  catchYawn(): boolean {
+    if (!this.landed || this.held || this.action !== 'none' || this.impactTimer > 0 || this.pressTimer > 0) return false;
+    if (this.calm > this.sleepAt) return false;
+    this.startAction('yawn', 1.6, null);
+    this.actionCooldown = Math.max(this.actionCooldown, 3);
+    return true;
   }
   private lickSide = 0;
   private lickUp = 0;
