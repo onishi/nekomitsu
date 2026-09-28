@@ -870,6 +870,8 @@ export class Cat {
       env.sound.purr();
     }
     if (e !== 'sleep' && e !== 'bliss' && this.calm < 2) this.purred = false;
+    // 寝つくたびに寝顔を決める（半分は「- -」の線の目、半分は「すやすや」の弧の目）
+    if (e === 'sleep' && this.expression !== 'sleep') this.sleepFlat = Math.random() < 0.5;
     this.expression = e;
     this.blush += ((e === 'bliss' || e === 'happy' || this.action === 'lick' ? 1 : 0) - this.blush) * Math.min(1, dt * 2);
     if (this.grumpy) this.blush = 0;
@@ -1126,6 +1128,8 @@ export class Cat {
   }
   heldAngle = 0;
 
+  /** 描画用: 線の目（- -）で寝ている */
+  sleepFlat = false;
   /** 動じない性格（押されても潰されても無表情） */
   stoic = false;
   /** たまに「スン…」と無表情になる残り時間 */

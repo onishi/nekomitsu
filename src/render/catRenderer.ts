@@ -949,8 +949,8 @@ function drawFace(
     if (e === 'sleep' || e === 'bliss' || e === 'happy' || e === 'groom' || e === 'yawn' || e === 'stretch' || open < 0.12) {
       // 閉じた目
       ctx.beginPath();
-      if (e === 'stretch') {
-        // - - ぎゅっとつぶって横線だけ
+      if (e === 'stretch' || (e === 'sleep' && cat.sleepFlat)) {
+        // - - 目をつぶって横線だけ（のびー、線の目の寝顔）
         ctx.moveTo(-erx * 1.05, ery * 0.1);
         ctx.lineTo(erx * 1.05, ery * 0.1);
       } else if (e === 'bliss' || e === 'happy' || e === 'groom') {
