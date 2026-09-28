@@ -74,6 +74,29 @@ export class ShapeCluster {
     this.recompute();
   }
 
+  /**
+   * ゴール・中心・角度を今の粒子位置に合わせる（吊るしていた猫を放すとき。
+   * kinematic の間は solve されず古いままなので、そのまま描くと放した瞬間の1フレームだけ形が崩れて見える）
+   */
+  snapTo(w: World, angle: number): void {
+    let sx = 0;
+    let sy = 0;
+    let sw = 0;
+    for (let k = 0; k < this.idx.length; k++) {
+      const i = this.idx[k];
+      this.goalX[k] = w.x[i];
+      this.goalY[k] = w.y[i];
+      sx += w.x[i] * this.wt[k];
+      sy += w.y[i] * this.wt[k];
+      sw += this.wt[k];
+    }
+    if (sw > 0) {
+      this.cx = sx / sw;
+      this.cy = sy / sw;
+    }
+    this.angle = angle;
+  }
+
   /** rest 形状を変えたら呼ぶ */
   recompute(): void {
     const n = this.idx.length;

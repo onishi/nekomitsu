@@ -575,6 +575,8 @@ export class Cat {
     this.restSx = this.heldSqueeze;
     this.world.setKinematic(this.body, false);
     const w = this.world;
+    // 吊るしている間は止まっていた形の目標を、今の姿勢に合わせる（放した瞬間に体と頭が離れて見えないように）
+    for (const cl of this.body.clusters) cl.snapTo(w, this.heldAngle);
     for (let i = this.body.start; i < this.body.start + this.body.count; i++) {
       w.vx[i] = vx;
       w.vy[i] = vy;
