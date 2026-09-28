@@ -6,6 +6,7 @@ import { Effects } from './render/effects';
 import { CYCLE } from './physics/shapes';
 import { drawBackground, drawBowlBack, drawBowlFront, tableWorldY, type View } from './render/scene';
 import { THEMES, themeForCycle, type Theme } from './render/themes';
+import { timeTint, vesselFor, type Tint, type Vessel } from './cycle';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -58,7 +59,7 @@ function layout(): void {
   const R = b.R;
   // 見せたい範囲: 吊るされた猫〜テーブル
   const top = game.dropY - Math.max(R * 0.38, 90);
-  const bottom = tableWorldY(b) + R * 0.1;
+  const bottom = tableWorldY(b, vessel()) + R * 0.1;
   const halfW = Math.max(b.halfW * 1.06, 200);
   const hudH = 56;
   const scale = Math.min(w / (halfW * 2), (h - hudH) / (bottom - top));
@@ -519,11 +520,49 @@ function themeLayers(): { theme: Theme; alpha: number }[] {
   return [{ theme: themeNow, alpha: 1 }];
 }
 
+/** 今の面の容器の素材（ねこみつの周のテーマで決まる。ねこけしはいつもガラス） */
+function vessel(): Vessel {
+  return game.mode === 'keshi' ? 'glass' : vesselFor(themeForCycle(Math.floor((game.stage - 1) / CYCLE)).key, game.bowl.kind);
+}
+
+// 一日の時間（周の中で朝 → 昼 → 夕方 → 夜）。面が変わると約2.5秒かけて色が移る
+const tintNow: Tint = [255, 255, 255, 0];
+// 虹: 晴れた外のテーマで、クリアしたときにときどき（次の面へ進むと消えていく）
+const RAINBOW_THEMES = new Set(['garden', 'meadow', 'rooftop', 'beach']);
+let rainbow = 0;
+let rainbowOn = false;
+let rainbowStage = -1;
+let ambientLast = performance.now();
+function ambient(): { tint: Tint; rainbow: number } {
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - ambientLast) / 1000);
+  ambientLast = now;
+  const keshi = game.mode === 'keshi';
+  const want = keshi ? ([255, 255, 255, 0] as Tint) : timeTint(game.stage, themeNow.dark);
+  const k = 1 - Math.exp(-dt * 1.6);
+  // 色の変わり目で白っぽくならないよう、濃さが 0 のときは色だけ先に合わせる
+  if (tintNow[3] < 0.005) for (let i = 0; i < 3; i++) tintNow[i] = want[i];
+  if (want[3] < 0.005) {
+    tintNow[3] += (0 - tintNow[3]) * k;
+  } else {
+    for (let i = 0; i < 4; i++) tintNow[i] += (want[i] - tintNow[i]) * k;
+  }
+  if (game.phase === 'cleared' && rainbowStage !== game.stage) {
+    rainbowStage = game.stage;
+    rainbowOn = !keshi && RAINBOW_THEMES.has(themeNow.key) && Math.random() < 0.35;
+  }
+  if (game.phase !== 'cleared') rainbowOn = false;
+  rainbow = Math.max(0, Math.min(1, rainbow + (rainbowOn ? dt / 1.5 : -dt / 2)));
+  return { tint: tintNow, rainbow };
+}
+
 function render(): void {
   const b = game.bowl;
-  drawBackground(ctx, view, b, themeLayers(), performance.now() / 1000);
+  const ves = vessel();
+  const amb = ambient();
+  drawBackground(ctx, view, b, themeLayers(), performance.now() / 1000, ves, amb.tint, amb.rainbow);
   ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, view.ox * view.dpr, view.oy * view.dpr);
-  drawBowlBack(ctx, b);
+  drawBowlBack(ctx, b, ves);
   const k = game.keshi;
   for (const c of game.cats) if (!c.fusing) drawCat(ctx, c, game.time);
   if (k) {
@@ -535,7 +574,7 @@ function render(): void {
       drawCat(ctx, f.b, game.time, false);
     }
   }
-  drawBowlFront(ctx, b);
+  drawBowlFront(ctx, b, ves);
   if (k) drawDangerLine(k.lineY, k.overTime);
   fx.draw(ctx);
   if (press.active) {

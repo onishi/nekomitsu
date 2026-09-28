@@ -52,6 +52,16 @@ const forcedStoic = (() => {
   }
 })();
 
+/** URL の ?stage=37 などで、その面から始める（動作確認用。ねこみつのみ） */
+const forcedStage = (() => {
+  try {
+    const n = Number(new URLSearchParams(globalThis.location?.search ?? '').get('stage'));
+    return Number.isInteger(n) && n > 0 ? n : 1;
+  } catch {
+    return 1;
+  }
+})();
+
 /** URL の ?coat=ushi などで柄を固定できる（動作確認用。ねこみつのみ） */
 const forcedCoat = (() => {
   try {
@@ -157,7 +167,7 @@ export class Game {
     if (mode === 'keshi') this.startKeshi();
     else {
       this.keshi = null;
-      this.startStage(1);
+      this.startStage(forcedStage);
     }
   }
 
