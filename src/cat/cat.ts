@@ -798,8 +798,12 @@ export class Cat {
     // ポーズ
     const legTarget = this.landed ? 0 : 1;
     this.legPose += (legTarget - this.legPose) * Math.min(1, dt * (this.landed ? 10 : 6));
-    // 細くして落とした猫: 口を通り抜けたら（着地したら）ゆっくり本来の体型へ
-    if (this.restSx < 1 && (this.landed || this.cy > env.rimY + this.species.b)) {
+    // 細くして落とした猫: 口を通り抜けたら、ゆっくり本来の体型へ。
+    // 空中でほかの猫に触れただけ（速いオートで続けて落としたとき）では戻さない。
+    // 口の上で太くなると、口の上に延びた見えない壁に挟まって宙に詰まってしまうため。
+    // 口の上に積み上がって落ち着いた猫は戻す
+    const through = this.cy > env.rimY + this.species.b || (this.landed && this.body.minY > env.rimY);
+    if (this.restSx < 1 && (through || (this.landed && this.calm > 2))) {
       this.restSx = Math.min(1, this.restSx + dt * 1.2);
     } else if (this.restSx > 1) {
       // ねこけし: 融合直後の横長の体が、むにゅっと本来の猫の形へ

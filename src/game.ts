@@ -287,6 +287,7 @@ export class Game {
     this.fill = 0;
     this.squeeze = 0;
     this.judgeTimer = 0;
+    this.crowdTime = 0;
     this.dropsThisStage = 0;
     this.env.cleared = false;
     this.env.clearNap = false;
@@ -410,7 +411,17 @@ export class Game {
 
   get canDrop(): boolean {
     // 表示している猫は判定中でもクリア後でも落とせる（ねこけしのゲームオーバー後は落とせない）
-    return this.held !== null && this.heldIntro > 0.6 && this.phase !== 'gameover';
+    return this.held !== null && this.heldIntro > 0.6 && this.phase !== 'gameover' && !this.dropZoneBusy();
+  }
+
+  /**
+   * 吊るしている猫のすぐ下まで、ほかの猫がいる（落としたばかりの猫がまだ離れていない・口の上まで積み上がった）。
+   * そこへ落とすと猫どうしが重なり、押し出しで上の猫たちがまとめて押し上げられて宙に昇っていくので、落とさずに待つ
+   */
+  private dropZoneBusy(): boolean {
+    const lim = this.dropY + this.bowl.R * 0.12;
+    for (const c of this.cats) if (c.body.minY < lim) return true;
+    return false;
   }
 
   /** 容器の中（口より下）を触ったか */
@@ -614,7 +625,17 @@ export class Game {
     this.updatePhase(dt);
   }
 
+  /** 着地した猫が吊るしている猫の近くまで積み上がっている時間 */
+  private crowdTime = 0;
+  private updateCrowd(dt: number): void {
+    const lim = this.dropY + this.bowl.R * 0.3;
+    let crowded = false;
+    for (const c of this.cats) if (c.landed && c.body.minY < lim) crowded = true;
+    this.crowdTime = crowded ? this.crowdTime + dt : 0;
+  }
+
   private updatePhase(dt: number): void {
+    this.updateCrowd(dt);
     if (this.phase === 'playing') {
       const full = this.fill >= this.fillGoal || this.overflowing();
       if (full && this.cats.length > 0) {
@@ -655,8 +676,12 @@ export class Game {
     }
   }
 
-  /** 吊るしている猫の近くまで積み上がって落ち着いている（念のための救済） */
+  /**
+   * 吊るしている猫の近くまで積み上がって落ち着いている（念のための救済）。
+   * 管の途中で詰まって口の上まで積み上がったまま1.5秒たったときも（落ち着いていなくても）満杯とみなす
+   */
   private overflowing(): boolean {
+    if (this.crowdTime > 1.5) return true;
     for (const c of this.cats) {
       if (c.landed && c.calm > 1 && c.body.minY < this.dropY + this.bowl.R * 0.3) return true;
     }

@@ -911,14 +911,16 @@ export class World {
       if (!c.hit) continue;
       x[i] = c.x;
       y[i] = c.y;
-      // 摩擦: 接線方向の移動を少し削る
+      // 摩擦: 接線方向の移動を少し削る。口より上（見えない壁）は摩擦なし
+      // （壁に挟まった猫が摩擦で宙に留まらず、重力で滑り落ちるように）
+      const f = y[i] < bowl.openY ? 0 : mu;
       const dx = x[i] - px[i];
       const dy = y[i] - py[i];
       const dn = dx * c.nx + dy * c.ny;
       const tx = dx - dn * c.nx;
       const ty = dy - dn * c.ny;
-      x[i] -= tx * mu;
-      y[i] -= ty * mu;
+      x[i] -= tx * f;
+      y[i] -= ty * f;
       this.contact[i] |= CONTACT_BOWL;
       this.cnx[i] = c.nx;
       this.cny[i] = c.ny;
